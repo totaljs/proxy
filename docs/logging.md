@@ -5,7 +5,7 @@
 | Access | Completed HTTP requests, with the client IP, domain, method, URL, response status, duration and user agent | Off |
 | Operational | Startup, route changes and certificate events, including failures | Container output |
 
-This guide covers the current Proxy source. These logging options are pending a new Docker image. To try them now, use the [source build](installation.md#build-from-source-with-a-totaljs-example).
+To try these settings, follow the [Docker Compose installation](installation.md#install-with-docker-compose).
 
 ## Configure a deployment
 

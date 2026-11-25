@@ -26,8 +26,7 @@ routes_file    :
 // Optional snapshot from the Docker watchdog. Requires a separate routes_file.
 docker_routes_file :
 
-// Control API for Code: a Unix socket (in a folder of its own, the only one Code shares with Proxy), or host:port
-// together with a token
+// Control API: an owner-only Unix socket, or host:port with a token.
 control        : control/proxy.sock
 token          :
 // Optional JSON file of scoped tokens and hostname allowlists for shared Proxy.

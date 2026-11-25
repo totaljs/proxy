@@ -5,7 +5,7 @@ const Assert = require('node:assert/strict');
 const Net = require('node:net');
 const Tls = require('node:tls');
 const Path = require('node:path');
-const { edge: start, backend: makebackend, request, selfsigned, tmpdir } = require('./helpers');
+const { proxy: start, backend: makebackend, request, selfsigned, tmpdir } = require('./helpers');
 
 Test('proxy', async function(t) {
 
@@ -15,7 +15,7 @@ Test('proxy', async function(t) {
 	const data = tmpdir();
 	const cert = selfsigned(Path.join(data, 'custom'), 'secure', ['secure.test', 'www.secure.test']);
 
-	const edge = await start({ data }, [
+	const proxy = await start({ data }, [
 		{ id: 'shop', hosts: ['shop.test', '*.apps.test'], redirects: ['www.shop.test'], target, maxupload: 1 },
 		{ id: 'secure', hosts: ['secure.test'], redirects: ['www.secure.test'], target, tls: 'custom', hsts: true },
 		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off' },
@@ -23,18 +23,18 @@ Test('proxy', async function(t) {
 	]);
 
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
 
-	const http = edge.ports.http;
-	const https = edge.ports.https;
+	const http = proxy.ports.http;
+	const https = proxy.ports.https;
 
 	await t.test('forwards a request with fresh forwarding headers', async function() {
 		const res = await request({ port: http, host: 'Shop.test', path: '/api/list?page=2', headers: { 'x-forwarded-for': '6.6.6.6', 'x-real-ip': '6.6.6.6', 'forwarded': 'for=6.6.6.6' } });
 		Assert.equal(res.status, 200);
 		Assert.equal(res.json.url, '/api/list?page=2');
-		// The host the edge routed by, as the edge knows it
+		// The host the proxy routed by, as the proxy knows it
 		Assert.equal(res.json.headers.host, 'shop.test:' + http);
 		Assert.equal(res.json.headers['x-forwarded-for'], '127.0.0.1');
 		Assert.equal(res.json.headers['x-real-ip'], '127.0.0.1');
@@ -66,7 +66,7 @@ Test('proxy', async function(t) {
 		const res = await request({ port: http, host: 'shop.test', method: 'POST', body, headers: { 'content-length': body.length } });
 		Assert.equal(res.status, 413);
 
-		// Without a length, the edge counts while it forwards
+		// Without a length, the proxy counts while it forwards
 		const chunked = await request({ port: http, host: 'shop.test', method: 'POST', body, headers: { 'transfer-encoding': 'chunked' } });
 		Assert.equal(chunked.status, 413);
 
@@ -98,7 +98,7 @@ Test('proxy', async function(t) {
 		Assert.equal(JSON.parse(allowed.text).size, 500);
 	});
 
-	await t.test('a container that does not answer gets the page of the edge, 503', async function() {
+	await t.test('a container that does not answer gets the page of the proxy, 503', async function() {
 		const res = await request({ port: http, host: 'down.test', headers: { 'accept-language': 'es-ES,es;q=0.9,en;q=0.8' } });
 		Assert.equal(res.status, 503);
 		Assert.equal(res.headers['retry-after'], '60');
@@ -107,11 +107,11 @@ Test('proxy', async function(t) {
 	});
 
 	await t.test('answers the ACME HTTP check', async function() {
-		edge.challenges.set('token123', 'token123.thumb');
+		proxy.challenges.set('token123', 'token123.thumb');
 		const res = await request({ port: http, host: 'shop.test', path: '/.well-known/acme-challenge/token123' });
 		Assert.equal(res.status, 200);
 		Assert.equal(res.text, 'token123.thumb');
-		edge.challenges.delete('token123');
+		proxy.challenges.delete('token123');
 		const gone = await request({ port: http, host: 'shop.test', path: '/.well-known/acme-challenge/token123' });
 		Assert.equal(gone.json.url, '/.well-known/acme-challenge/token123');
 	});
@@ -130,7 +130,7 @@ Test('proxy', async function(t) {
 		Assert.equal(res.status, 503);
 		Assert.equal(res.headers['retry-after'], '60');
 		Assert.match(res.text, /waiting for its HTTPS certificate/);
-		edge.challenges.set('pending-token', 'test-validation');
+		proxy.challenges.set('pending-token', 'test-validation');
 		const challenge = await request({ port: http, host: 'pending.test', path: '/.well-known/acme-challenge/pending-token' });
 		Assert.equal(challenge.status, 200);
 		Assert.equal(challenge.text, 'test-validation');

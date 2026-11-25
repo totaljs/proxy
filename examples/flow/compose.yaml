@@ -1,23 +1,45 @@
 services:
+  proxy:
+    image: ${PROXY_IMAGE:-totaljs-proxy:local}
+    build: ../..
+    restart: unless-stopped
+    depends_on:
+      - flow
+    command: ["node", "index.js", "proxy.conf"]
+    ports:
+      - "${FLOW_BIND:-127.0.0.1}:80:80"
+      - "${FLOW_BIND:-127.0.0.1}:443:443"
+    volumes:
+      - proxy-data:/proxy/data
+    configs:
+      - source: proxy-config
+        target: /proxy/proxy.conf
+      - source: flow-route
+        target: /proxy/routes.json
+
   flow:
-    container_name: totaljs-flow
     image: totalplatform/flow:11
     restart: unless-stopped
     volumes:
       - flow-databases:/www/.src/databases
       - flow-streams:/www/.src/flowstream
-    environment:
-      PROXY_HOST: https://flow.example.com
-      PROXY_PORT: "8000"
-      PROXY_LOGS: "true"
-      # Optional certificate directory relative to Proxy's custom_cert_dir.
-      # PROXY_CERT: shared/example
-    networks: [proxy]
 
-networks:
-  proxy:
-    external: true
+configs:
+  proxy-config:
+    content: |
+      routes_file : routes.json
+  flow-route:
+    content: |
+      [
+        {
+          "id": "flow",
+          "hosts": ["${FLOW_HOST:-flow.localhost}"],
+          "target": "http://flow:8000",
+          "tls": "${FLOW_TLS:-off}"
+        }
+      ]
 
 volumes:
+  proxy-data:
   flow-databases:
   flow-streams:

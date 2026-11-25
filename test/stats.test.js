@@ -9,7 +9,7 @@ const Fs = require('node:fs');
 const Path = require('node:path');
 const Http = require('node:http');
 const Stats = require('../lib/stats');
-const { edge: start, request, tmpdir } = require('./helpers');
+const { proxy: start, request, tmpdir } = require('./helpers');
 
 async function backend() {
 	const server = Http.createServer(function(req, res) {
@@ -34,15 +34,15 @@ Test('the visits of a site', async function(t) {
 		{ id: 'shop', hosts: ['shop.test'], target: 'http://127.0.0.1:' + app.port, https: false, tls: 'off', stats: true },
 		{ id: 'blog', hosts: ['blog.test'], target: 'http://127.0.0.1:' + app.port, https: false, tls: 'off' }
 	];
-	const edge = await start({ data }, routes);
+	const proxy = await start({ data }, routes);
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		app.close();
 		Fs.rmSync(data, { recursive: true, force: true });
 	});
 
-	const visit = (host, path, ua, headers) => request({ port: edge.ports.http, host, path, headers: Object.assign({ 'user-agent': ua }, headers) });
-	const control = (path, method) => request({ socketPath: edge.config.control, path, method });
+	const visit = (host, path, ua, headers) => request({ port: proxy.ports.http, host, path, headers: Object.assign({ 'user-agent': ua }, headers) });
+	const control = (path, method) => request({ socketPath: proxy.config.control, path, method });
 
 	await t.test('who asked: a person, a search engine, an AI agent or another bot', function() {
 		Assert.deepEqual(Stats.client(PERSON), { kind: 'person', name: '' });
@@ -96,7 +96,7 @@ Test('the visits of a site', async function(t) {
 	});
 
 	await t.test('the days go to a file, and DELETE removes them', async function() {
-		edge.stats.flush();
+		proxy.stats.flush();
 		const day = new Date().toISOString().substring(0, 10);
 		const file = Path.join(data, 'stats', 'shop', day + '.json');
 		Assert.equal(JSON.parse(Fs.readFileSync(file, 'utf8')).views, 6);

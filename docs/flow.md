@@ -1,41 +1,33 @@
-# Deploy Total.js Flow with Proxy
+# Run Total.js Flow behind Proxy
 
-The [Flow example](../examples/flow/compose.yaml) uses the official [Total.js Flow 11 image](https://github.com/totaljs/flow#flow-in-docker). Configure the domain in the app’s Compose file. Flow listens on port 8000 inside its container and shares the `proxy` Docker network with Proxy.
+The [Flow Compose file](../examples/flow/compose.yaml) starts Total.js Proxy and the [official Flow 11 image](https://github.com/totaljs/flow#flow-in-docker) together. Compose creates a private network. Proxy receives requests and forwards them to `http://flow:8000`. The Proxy config and Flow route are inline in the YAML and require [Docker Compose 2.23.1 or later](https://docs.docker.com/reference/compose-file/configs/).
 
-1. **Set up shared Proxy once.** Use an existing Proxy and watchdog if you already run them on this server. For a fresh setup, create the Docker network if needed and follow the [installation guide](installation.md#install-with-docker-compose). Set `deploy/routes.json` to an empty array if you only want discovered apps.
+## Try it locally
 
-   ```sh
-   docker network inspect proxy >/dev/null 2>&1 || docker network create proxy
-   docker build -t totaljs-proxy:local .
-   docker compose -f deploy/compose.yaml up -d
-   node scripts/docker-watch.js proxy deploy/routes.docker.json
-   ```
+From the repository root:
 
-   Leave the watchdog running and continue in another terminal.
+```sh
+docker compose -f examples/flow/compose.yaml up --build -d
+curl --resolve flow.localhost:80:127.0.0.1 http://flow.localhost/
+```
 
-2. **Set up Flow privately.** From the repository root on the server, start a temporary Flow container bound to the server’s loopback address. The empty `PROXY_HOST` keeps the temporary container out of discovery.
+Open `http://flow.localhost/` in your browser. The default binds Proxy to loopback and uses HTTP. Only Proxy publishes ports. The volumes keep Flow’s settings and streams and Proxy’s certificates.
 
-   ```sh
-   docker compose -f examples/flow/compose.yaml run --rm \
-     -e PROXY_HOST= -p 127.0.0.1:18000:8000 flow
-   ```
+## Publish Flow over HTTPS
 
-   From your computer, open an SSH tunnel:
+First sign in locally and change Flow’s initial credentials in its settings. For a remote host, reach the loopback listener through SSH:
 
-   ```sh
-   ssh -N -L 18000:127.0.0.1:18000 user@server
-   ```
+```sh
+ssh -N -L 18080:127.0.0.1:80 user@server
+```
 
-   Open `http://localhost:18000`, sign in with Flow’s initial credentials and change them in its settings. Stop the temporary container with Ctrl+C. The named volumes keep the settings and flows for the next start. Run both Compose commands from the same checkout so they use the same volumes.
+Open `http://flow.localhost:18080/` on your computer through the tunnel. Keep the same Compose project when switching to HTTPS so Flow retains its settings.
 
-3. **Publish Flow.** Replace `https://flow.example.com` in [compose.yaml](../examples/flow/compose.yaml) with your hostname. Point its DNS record at Proxy and allow inbound TCP 80 and 443 on the Proxy server. Start Flow:
+Point your public hostname at the server, allow inbound TCP ports 80 and 443, then run:
 
-   ```sh
-   docker compose -f examples/flow/compose.yaml up -d
-   ```
+```sh
+FLOW_HOST=flow.example.com FLOW_TLS=auto FLOW_BIND=0.0.0.0 \
+  docker compose -f examples/flow/compose.yaml up -d
+```
 
-   The watchdog reads `PROXY_HOST` and `PROXY_PORT` from the Flow container and updates its route. Open your HTTPS URL once Proxy has issued the certificate. Check the logs of the shared Proxy if the certificate is still pending. Changing `PROXY_LOGS` controls access logging for this app when Proxy has a log destination configured.
-
-If Code already manages the server’s public ports, you can deploy Flow as a Code project and set its domain there.
-
-See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
+Use your real domain. Open its HTTPS URL once Proxy has issued a certificate. Check progress with `docker compose -f examples/flow/compose.yaml logs proxy`. Put the same variables in `examples/flow/.env` if you want Compose to reuse them for later runs from that directory.

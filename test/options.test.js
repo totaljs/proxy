@@ -1,6 +1,6 @@
 'use strict';
 
-// What nginx-proxy did and the edge now does too: headers for every site and for one, full HSTS, the default upload
+// What nginx-proxy did and the proxy now does too: headers for every site and for one, full HSTS, the default upload
 // limit, compression, a user and password per site, allowed and blocked addresses, own error pages, the access log.
 
 const Test = require('node:test');
@@ -12,9 +12,9 @@ const Net = require('node:net');
 const Zlib = require('node:zlib');
 const Config = require('../lib/config');
 const Guard = require('../lib/guard');
-const { edge: start, request, selfsigned, tmpdir } = require('./helpers');
+const { proxy: start, request, selfsigned, tmpdir } = require('./helpers');
 
-const BIG = '<p>' + 'The edge compresses text. '.repeat(200) + '</p>';
+const BIG = '<p>' + 'The proxy compresses text. '.repeat(200) + '</p>';
 
 // A container that answers what each test needs
 async function backend() {
@@ -74,7 +74,7 @@ Test('the options of nginx-proxy', async function(t) {
 	Fs.mkdirSync(errors);
 	Fs.writeFileSync(Path.join(errors, '502.html'), '<h1>We are back soon</h1>');
 
-	const edge = await start({
+	const proxy = await start({
 		data,
 		headers: Config.parse("headers : X-Content-Type-Options: nosniff | Content-Security-Policy: default-src 'self' https:; frame-ancestors * | Strict-Transport-Security: max-age=31536000; includeSubDomains; preload").headers,
 		maxupload: 1,
@@ -92,12 +92,12 @@ Test('the options of nginx-proxy', async function(t) {
 	]);
 
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		server.close();
 	});
 
-	const http = edge.ports.http;
-	const https = edge.ports.https;
+	const http = proxy.ports.http;
+	const https = proxy.ports.https;
 
 	await t.test('headers of every site and of one site, never over the ones of the app', async function() {
 		let res = await request({ port: http, host: 'open.test' });
@@ -166,7 +166,7 @@ Test('the options of nginx-proxy', async function(t) {
 		Assert.equal((await request({ port: http, host: 'home.test' })).status, 403);
 		Assert.equal(await upgrade(http, 'office.test'), 403);
 		Assert.equal((await request({ port: http, host: 'open.test' })).status, 200);
-		// The address the edge sees, never a forwarding header
+		// The address the proxy sees, never a forwarding header
 		Assert.equal((await request({ port: http, host: 'office.test', headers: { 'x-forwarded-for': '10.0.0.1' } })).status, 403);
 	});
 
@@ -176,14 +176,14 @@ Test('the options of nginx-proxy', async function(t) {
 		Assert.equal(res.status, 503);
 		Assert.equal(res.headers['retry-after'], '60');
 		Assert.equal(res.text, '<h1>We are back soon</h1>');
-		// The ones without a file keep the page of the edge
+		// The ones without a file keep the page of the proxy
 		Assert.match((await request({ port: http, host: 'nobody.test' })).text, /No site is published/);
 	});
 
 	await t.test('the access log uses a daily file per route', async function() {
 		const { once } = require('node:events');
-		const written = [...edge.accesslog.files.values()].map(file => once(file.stream, 'finish'));
-		edge.accesslog.close();
+		const written = [...proxy.accesslog.files.values()].map(file => once(file.stream, 'finish'));
+		proxy.accesslog.close();
 		await Promise.all(written);
 		const files = Fs.readdirSync(logs);
 		const open = files.find(name => /^access-open-\d{4}-\d{2}-\d{2}\.log$/.test(name));
@@ -240,22 +240,22 @@ Test('an access log can be limited to opted-in routes', async function(t) {
 	const data = tmpdir();
 	const target = 'http://127.0.0.1:9';
 	const logs = Path.join(data, 'logs');
-	const edge = await start({ data, accesslog: logs, accesslog_default: false }, [
+	const proxy = await start({ data, accesslog: logs, accesslog_default: false }, [
 		{ id: 'audit', hosts: ['audit.test', 'audit-alias.test'], target, tls: 'off', accesslog: true, accesslog_dir: 'apps/audit' },
 		{ id: 'quiet', hosts: ['quiet.test'], target, tls: 'off' }
 	]);
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		Fs.rmSync(data, { recursive: true, force: true });
 	});
-	const port = edge.ports.http;
+	const port = proxy.ports.http;
 	Assert.equal((await request({ port, host: 'quiet.test' })).status, 503);
 	Assert.equal(Fs.existsSync(logs), false);
 	Assert.equal((await request({ port, host: 'audit.test' })).status, 503);
 	Assert.equal((await request({ port, host: 'audit-alias.test' })).status, 503);
-	const stream = [...edge.accesslog.files.values()][0].stream;
+	const stream = [...proxy.accesslog.files.values()][0].stream;
 	const finished = once(stream, 'finish');
-	edge.accesslog.close();
+	proxy.accesslog.close();
 	await finished;
 	const appLogs = Path.join(logs, 'apps', 'audit');
 	const [file] = Fs.readdirSync(appLogs);

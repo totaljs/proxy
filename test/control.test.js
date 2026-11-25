@@ -3,20 +3,20 @@
 const Test = require('node:test');
 const Assert = require('node:assert/strict');
 const Fs = require('node:fs');
-const { edge: start, backend: makebackend, request } = require('./helpers');
+const { proxy: start, backend: makebackend, request } = require('./helpers');
 
 Test('control API', async function(t) {
 
 	const backend = await makebackend();
-	const edge = await start({ dns_zone: 'acme.code.test', dns: 0 });
-	edge.manager.stop();
+	const proxy = await start({ dns_zone: 'acme.code.test', dns: 0 });
+	proxy.manager.stop();
 
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
 
-	const socketPath = edge.config.control;
+	const socketPath = proxy.config.control;
 	const api = (method, path, body) => request({ socketPath, method, path, body: body ? JSON.stringify(body) : undefined, headers: { 'content-type': 'application/json' } });
 
 	Assert.equal(Fs.statSync(socketPath).mode & 0o777, 0o600);
@@ -26,7 +26,7 @@ Test('control API', async function(t) {
 	Assert.equal(put.json.id, 'shop');
 
 	// Published right away
-	Assert.equal((await request({ port: edge.ports.http, host: 'shop.test' })).status, 200);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'shop.test' })).status, 200);
 
 	Assert.equal((await api('GET', '/routes')).json.length, 1);
 	Assert.equal((await api('GET', '/routes/shop')).json.target, 'http://127.0.0.1:' + backend.port);
@@ -44,12 +44,12 @@ Test('control API', async function(t) {
 
 	const status = await api('GET', '/status');
 	Assert.equal(status.json.dns_zone, 'acme.code.test');
-	Assert.equal(status.json.ports.http, edge.ports.http);
+	Assert.equal(status.json.ports.http, proxy.ports.http);
 
 	Assert.equal((await api('POST', '/renew/shop.test')).status, 404);
 
 	Assert.equal((await api('DELETE', '/routes/shop')).status, 200);
-	Assert.equal((await request({ port: edge.ports.http, host: 'shop.test' })).status, 404);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'shop.test' })).status, 404);
 	Assert.equal((await api('DELETE', '/routes/shop')).status, 404);
 });
 
@@ -57,10 +57,10 @@ Test('control API on the network needs a token', async function(t) {
 
 	await Assert.rejects(start({ control: '127.0.0.1:0' }), /needs a token/);
 
-	const edge = await start({ control: '127.0.0.1:0', token: 'secret-token' });
-	t.after(() => edge.stop());
+	const proxy = await start({ control: '127.0.0.1:0', token: 'secret-token' });
+	t.after(() => proxy.stop());
 
-	const port = edge.control.address().port;
+	const port = proxy.control.address().port;
 	Assert.equal((await request({ port, path: '/routes' })).status, 401);
 	Assert.equal((await request({ port, path: '/routes', headers: { authorization: 'Bearer wrong-token!' } })).status, 401);
 	Assert.equal((await request({ port, path: '/routes', headers: { authorization: 'Bearer secret-token' } })).status, 200);
@@ -74,14 +74,14 @@ Test('file-managed routes reload atomically and reject API mutations', { timeout
 	const routesFile = Path.join(data, 'standalone.json');
 	const shop = { id: 'shop', hosts: ['shop.localhost'], tls: 'off', target: 'http://127.0.0.1:' + backend.port };
 	Fs.writeFileSync(routesFile, JSON.stringify([shop]));
-	const edge = await start({ data, routes_file: routesFile });
+	const proxy = await start({ data, routes_file: routesFile });
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 		Fs.rmSync(data, { recursive: true, force: true });
 	});
-	const socketPath = edge.config.control;
-	Assert.equal((await request({ port: edge.ports.http, host: shop.hosts[0] })).status, 200);
+	const socketPath = proxy.config.control;
+	Assert.equal((await request({ port: proxy.ports.http, host: shop.hosts[0] })).status, 200);
 	Assert.equal((await request({ socketPath, path: '/routes/shop' })).json.id, shop.id);
 	Assert.equal((await request({ socketPath, method: 'DELETE', path: '/routes/shop' })).status, 409);
 	Assert.equal((await request({ socketPath, method: 'PUT', path: '/routes/shop', body: JSON.stringify(shop) })).status, 409);
@@ -93,26 +93,26 @@ Test('file-managed routes reload atomically and reject API mutations', { timeout
 		Fs.renameSync(routesFile + '.tmp', routesFile);
 	};
 	const rejected = new Promise(resolve => {
-		edge.log = message => {
+		proxy.log = message => {
 			if (message.includes('could not reload'))
 				resolve(message);
 		};
 	});
 	writeRoutes([replacement, { ...shop, id: 'duplicate', hosts: replacement.hosts }]);
 	Assert.match(await rejected, /already belongs/);
-	Assert.equal((await request({ port: edge.ports.http, host: 'shop.localhost' })).status, 200);
-	Assert.equal((await request({ port: edge.ports.http, host: 'next.localhost' })).status, 404);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'shop.localhost' })).status, 200);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'next.localhost' })).status, 404);
 
 	const reloaded = new Promise(resolve => {
-		edge.log = message => {
+		proxy.log = message => {
 			if (message.includes('reloaded'))
 				resolve();
 		};
 	});
 	writeRoutes([replacement]);
 	await reloaded;
-	Assert.equal((await request({ port: edge.ports.http, host: 'next.localhost' })).status, 200);
-	Assert.equal((await request({ port: edge.ports.http, host: 'shop.localhost' })).status, 404);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'next.localhost' })).status, 200);
+	Assert.equal((await request({ port: proxy.ports.http, host: 'shop.localhost' })).status, 404);
 	Assert.equal((await request({ socketPath, path: '/routes/next' })).json.id, 'next');
 
 });
@@ -129,14 +129,14 @@ Test('shared control isolates route IDs, domains and global settings', async fun
 		alpha: { token: alpha, domains: ['*.alpha.test'] },
 		beta: { token: beta, domains: ['*.beta.test'] }
 	}));
-	const edge = await start({ data, control_clients_file: filename, token: admin, dns_zone: 'acme.code.test' });
-	edge.manager.stop();
+	const proxy = await start({ data, control_clients_file: filename, token: admin, dns_zone: 'acme.code.test' });
+	proxy.manager.stop();
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		Fs.rmSync(data, { recursive: true, force: true });
 	});
 	const api = (token, method, path, body) => request({
-		socketPath: edge.config.control, method, path, body: body && JSON.stringify(body),
+		socketPath: proxy.config.control, method, path, body: body && JSON.stringify(body),
 		headers: { authorization: token ? 'Bearer ' + token : '', 'content-type': 'application/json' }
 	});
 	const route = host => ({ hosts: [host], target: 'http://app:8000', tls: 'off', stats: true });
@@ -147,13 +147,13 @@ Test('shared control isolates route IDs, domains and global settings', async fun
 	Assert.deepEqual((await api(admin, 'GET', '/routes')).json.map(item => item.id).sort(), ['alpha--code', 'beta--code']);
 	Assert.deepEqual((await api(alpha, 'GET', '/routes')).json.map(item => item.hosts[0]), ['code.alpha.test']);
 	Assert.equal((await api(alpha, 'GET', '/routes/beta--code')).status, 404);
-	edge.manager.status.set('code.alpha.test', { state: 'valid' });
-	edge.manager.status.set('code.beta.test', { state: 'valid' });
+	proxy.manager.status.set('code.alpha.test', { state: 'valid' });
+	proxy.manager.status.set('code.beta.test', { state: 'valid' });
 	Assert.deepEqual(Object.keys((await api(alpha, 'GET', '/status')).json.hosts), ['code.alpha.test']);
 	Assert.deepEqual(Object.keys((await api(beta, 'GET', '/status')).json.hosts), ['code.beta.test']);
 
 	for (const name of ['alpha', 'beta'])
-		edge.stats.record(edge.routes.get(name + '--code'), { method: 'GET', path: '/' + name, status: 200 });
+		proxy.stats.record(proxy.routes.get(name + '--code'), { method: 'GET', path: '/' + name, status: 200 });
 	Assert.equal((await api(alpha, 'GET', '/stats/code')).json.length, 1);
 	Assert.equal((await api(beta, 'GET', '/stats/code')).json.length, 1);
 	Assert.equal((await api(alpha, 'DELETE', '/stats/code')).status, 200);

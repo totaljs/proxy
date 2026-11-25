@@ -41,7 +41,7 @@ A route:
 | `target` | | The container: `http://name:port`. Needed with `hosts` |
 | `page` | | The HTML of the page of this site while its container does not answer, or in maintenance (512 KB at most) |
 | `maintenance` | `false` | The page for every request, even when the container answers |
-| `limit` | `true` | `false`: the limit of requests of the settings does not apply (Code itself) |
+| `limit` | `true` | `false`: the limit of requests of the settings does not apply |
 | `https` | `true` | With TLS enabled, Proxy redirects HTTP to HTTPS once a usable certificate is available. Until then, it serves a temporary 503 and keeps ACME validation available. Set `https: false` to explicitly allow HTTP or `tls: off` to disable TLS. |
 | `hsts` | `false` | Sends `Strict-Transport-Security` |
 | `accesslog` | the config | Enable or disable HTTP access logging for this route when a deployment destination is configured. |
@@ -61,7 +61,7 @@ The addresses are the ones Proxy sees, never a header of the request. The concur
 
 A container that does not answer (stopped, starting, not there) gets the page of its site with **503** and `Retry-After: 60`, so search engines come back later: the `page` of the route, else the one of the settings, else `503.html` (or `502.html`) of the errors folder, else a plain page of Proxy in Spanish or English, as the visitor reads.
 
-The settings of every site, kept in `data/settings.json` (Code sends them from Settings → Security):
+The settings of every site, kept in `data/settings.json`:
 
 | Field | |
 |---|---|

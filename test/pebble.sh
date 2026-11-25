@@ -1,12 +1,12 @@
 #!/bin/sh
 # Starts Pebble, the test ACME server of Let's Encrypt, for test/pebble.test.js.
-# Pebble runs in Docker and checks the edge running on this machine:
+# Pebble runs in Docker and checks the proxy running on this machine:
 # HTTP on port 5002 and DNS through the test resolver on port 8053.
 set -e
 
 DIR=$(cd "$(dirname "$0")" && pwd)
 IMAGE=ghcr.io/letsencrypt/pebble:2.10.1
-NAME=code-edge-pebble
+NAME=totaljs-proxy-pebble
 
 # The address of this machine as containers see it
 HOST=$(docker run --rm alpine:3.20 getent hosts host.docker.internal 2>/dev/null | awk '{ print $1 }')

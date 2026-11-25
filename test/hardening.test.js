@@ -1,13 +1,13 @@
 'use strict';
 
-// What one client must never do to the edge or to the containers behind it
+// What one client must never do to the proxy or to the containers behind it
 
 const Test = require('node:test');
 const Assert = require('node:assert/strict');
 const Net = require('node:net');
 const Http = require('node:http');
 const Guard = require('../lib/guard');
-const { edge: start, request } = require('./helpers');
+const { proxy: start, request } = require('./helpers');
 
 // A container that counts the requests it gets
 async function counter() {
@@ -40,17 +40,17 @@ Test('hardening', async function(t) {
 
 	const backend = await counter();
 	const target = 'http://127.0.0.1:' + backend.address().port;
-	const edge = await start({}, [
+	const proxy = await start({}, [
 		{ id: 'site', hosts: ['site.test'], target, tls: 'off' },
 		{ id: 'private', hosts: ['private.test'], target, tls: 'off', auth: [{ user: 'ana', hash: Guard.hash('right-password') }] }
 	]);
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
-	const port = edge.ports.http;
+	const port = proxy.ports.http;
 
-	await t.test('a client that resets an upgrade being refused does not end the edge', async function() {
+	await t.test('a client that resets an upgrade being refused does not end the proxy', async function() {
 		const attempts = [];
 		for (let i = 0; i < 200; i++) {
 			attempts.push(new Promise(function(resolve) {
@@ -64,7 +64,7 @@ Test('hardening', async function(t) {
 		}
 		await Promise.all(attempts);
 		await new Promise(done => setTimeout(done, 300));
-		Assert.equal((await request({ port, host: 'site.test' })).status, 200, 'the edge is still there');
+		Assert.equal((await request({ port, host: 'site.test' })).status, 200, 'the proxy is still there');
 	});
 
 	await t.test('a chunked body is never read by the container as another request', async function() {
@@ -78,11 +78,11 @@ Test('hardening', async function(t) {
 		Assert.equal(backend.seen[0].xff, '127.0.0.1');
 	});
 
-	await t.test('the container gets the host the edge routed by and a plain path', async function() {
+	await t.test('the container gets the host the proxy routed by and a plain path', async function() {
 		backend.seen.length = 0;
 		await raw(port, 'GET http://evil.test/x?y=1 HTTP/1.1\r\nHost: site.test:x@evil.test\r\nConnection: close\r\n\r\n');
 		await new Promise(done => setTimeout(done, 300));
-		// "site.test:x@evil.test" is not a host of the edge; a plain one with an absolute address
+		// "site.test:x@evil.test" is not a host of the proxy; a plain one with an absolute address
 		await raw(port, 'GET http://evil.test/x?y=1 HTTP/1.1\r\nHost: site.test\r\nConnection: close\r\n\r\n');
 		await new Promise(done => setTimeout(done, 300));
 		Assert.ok(backend.seen.every(item => !item.host.includes('evil')), JSON.stringify(backend.seen));
@@ -134,16 +134,16 @@ Test('a slow route cannot fill the concurrent HTTP budget of another route', asy
 	});
 	await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
 	const target = 'http://127.0.0.1:' + backend.address().port;
-	const edge = await start({ http_active: 2, http_active_per_route: 1 }, [
+	const proxy = await start({ http_active: 2, http_active_per_route: 1 }, [
 		{ id: 'slow', hosts: ['slow.test'], target, tls: 'off', limit: false },
 		{ id: 'ready', hosts: ['ready.test'], target, tls: 'off' }
 	]);
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.closeAllConnections();
 		backend.close();
 	});
-	const port = edge.ports.http;
+	const port = proxy.ports.http;
 	const pending = request({ port, host: 'slow.test', path: '/hold' });
 	await reached;
 	const overloaded = await request({ port, host: 'slow.test' });
@@ -187,11 +187,11 @@ Test('the upstream pool queues requests and reuses a bounded number of connectio
 	backend.on('connection', () => connections++);
 	await new Promise(resolve => backend.listen(0, '127.0.0.1', resolve));
 	t.after(() => backend.close());
-	const edge = await start({ upstream_connections: 2, upstream_idle_connections: 2 }, [
+	const proxy = await start({ upstream_connections: 2, upstream_idle_connections: 2 }, [
 		{ id: 'pool', hosts: ['pool.test'], target: 'http://127.0.0.1:' + backend.address().port }
 	]);
-	t.after(() => edge.stop());
-	const responses = await Promise.all(Array.from({ length: 8 }, () => request({ port: edge.ports.http, host: 'pool.test' })));
+	t.after(() => proxy.stop());
+	const responses = await Promise.all(Array.from({ length: 8 }, () => request({ port: proxy.ports.http, host: 'pool.test' })));
 	Assert.ok(responses.every(res => res.status === 200 && res.text === 'ok'));
 	Assert.equal(peak, 2);
 	Assert.equal(connections, 2);

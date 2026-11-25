@@ -14,14 +14,14 @@ const Tls = require('node:tls');
 const Crypto = require('node:crypto');
 const Resolver = require('node:dns').promises.Resolver;
 const Dns = require('../lib/dns');
-const { edge: start, backend: makebackend, request, tmpdir } = require('./helpers');
+const { proxy: start, backend: makebackend, request, tmpdir } = require('./helpers');
 
 const FOLDER = Path.join(__dirname, 'pebble');
 const DIRECTORY = 'https://localhost:14000/dir';
 
 function get(url, ca) {
 	return new Promise((resolve, reject) => {
-		Https.get(url, { ca, timeout: 3000, agent: false, headers: { 'user-agent': 'code-edge-test' } }, res => {
+		Https.get(url, { ca, timeout: 3000, agent: false, headers: { 'user-agent': 'totaljs-proxy-test' } }, res => {
 			const chunks = [];
 			res.on('data', chunk => chunks.push(chunk));
 			res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }));
@@ -43,10 +43,10 @@ async function ready() {
 }
 
 // Stands in for the public DNS: every name points to this machine, and _acme-challenge
-// names are a CNAME to the edge zone, answered with what the edge DNS server says.
-function resolver(host, edge) {
+// names are a CNAME to the proxy zone, answered with what the proxy DNS server says.
+function resolver(host, proxy) {
 	const lookup = new Resolver();
-	lookup.setServers(['127.0.0.1:' + edge.ports.dns]);
+	lookup.setServers(['127.0.0.1:' + proxy.ports.dns]);
 	const answer = async function(message) {
 		const query = Dns.parse(message);
 		if (!query || query.error)
@@ -55,7 +55,7 @@ function resolver(host, edge) {
 		if (query.type === Dns.TYPE.A)
 			answers.push(Dns.record(Dns.POINTER, Dns.TYPE.A, 0, Buffer.from(host.split('.').map(Number))));
 		if (query.type === Dns.TYPE.TXT && query.name.startsWith('_acme-challenge.')) {
-			const target = edge.manager.record(query.name.substring(16)).value;
+			const target = proxy.manager.record(query.name.substring(16)).value;
 			answers.push(Dns.record(Dns.POINTER, Dns.TYPE.CNAME, 0, Dns.writename(target)));
 			try {
 				for (const value of await lookup.resolveTxt(target))
@@ -109,22 +109,22 @@ Test('certificates from Pebble over HTTP and DNS', { timeout: 180000 }, async fu
 
 	const ca = Path.join(FOLDER, 'minica.pem');
 	const backend = await makebackend();
-	const edge = await start({ http: 5002, dns: 0, dns_zone: 'acme.edge.test', acme: DIRECTORY, acme_ca: ca }, [
-		{ id: 'shop', hosts: ['shop.edge.test', '*.clientes.edge.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'auto' },
-		{ id: 'local', hosts: ['local.edge.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'off' }
+	const proxy = await start({ http: 5002, dns: 0, dns_zone: 'acme.proxy.test', acme: DIRECTORY, acme_ca: ca }, [
+		{ id: 'shop', hosts: ['shop.proxy.test', '*.clientes.proxy.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'auto' },
+		{ id: 'local', hosts: ['local.proxy.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'off' }
 	]);
-	const dns = await resolver(pebble.host, edge);
+	const dns = await resolver(pebble.host, proxy);
 
 	t.after(async () => {
 		dns.close();
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
 
 	const valid = async function(host, previous) {
 		for (let i = 0; i < 120; i++) {
-			const status = edge.manager.status.get(host);
-			const item = edge.certs.items.get(host);
+			const status = proxy.manager.status.get(host);
+			const item = proxy.certs.items.get(host);
 			if (status && status.state === 'valid' && item && item !== previous)
 				return item;
 			if (status && status.state === 'error' && !previous)
@@ -134,46 +134,46 @@ Test('certificates from Pebble over HTTP and DNS', { timeout: 180000 }, async fu
 		throw new Error(host + ' took too long');
 	};
 
-	Assert.equal((await request({ port: edge.ports.http, host: 'local.edge.test' })).status, 200);
-	Assert.equal(edge.manager.status.has('local.edge.test'), false);
-	const shop = await valid('shop.edge.test');
-	await valid('*.clientes.edge.test');
+	Assert.equal((await request({ port: proxy.ports.http, host: 'local.proxy.test' })).status, 200);
+	Assert.equal(proxy.manager.status.has('local.proxy.test'), false);
+	const shop = await valid('shop.proxy.test');
+	await valid('*.clientes.proxy.test');
 
-	// The certificates chain to the root of Pebble, and the edge serves them by SNI
+	// The certificates chain to the root of Pebble, and the proxy serves them by SNI
 	const root = (await get('https://localhost:15000/roots/0', pebble.ca)).body;
 
-	for (const name of ['shop.edge.test', 'ana.clientes.edge.test']) {
-		const res = await request({ port: edge.ports.https, secure: true, servername: name, host: name, ca: root, path: '/hello' });
+	for (const name of ['shop.proxy.test', 'ana.clientes.proxy.test']) {
+		const res = await request({ port: proxy.ports.https, secure: true, servername: name, host: name, ca: root, path: '/hello' });
 		Assert.equal(res.status, 200, name);
 		Assert.equal(res.json.url, '/hello');
 		Assert.equal(res.json.headers['x-forwarded-proto'], 'https');
 	}
 
 	// Saved on disk, the key readable only by the owner
-	const bundle = Path.join(edge.config.data, 'certs', '_wildcard.clientes.edge.test.json');
+	const bundle = Path.join(proxy.config.data, 'certs', '_wildcard.clientes.proxy.test.json');
 	Assert.equal(Fs.statSync(bundle).mode & 0o777, 0o600);
-	Assert.equal(Fs.statSync(Path.join(edge.config.data, 'acme', 'account.key')).mode & 0o777, 0o600);
+	Assert.equal(Fs.statSync(Path.join(proxy.config.data, 'acme', 'account.key')).mode & 0o777, 0o600);
 
 	// HTTP now goes to HTTPS
-	const redirect = await request({ port: edge.ports.http, host: 'shop.edge.test', path: '/x' });
+	const redirect = await request({ port: proxy.ports.http, host: 'shop.proxy.test', path: '/x' });
 	Assert.equal(redirect.status, 301);
 
 	// Renewing on request gives a new certificate, served right away
-	edge.manager.renew('shop.edge.test');
-	const renewed = await valid('shop.edge.test', shop);
+	proxy.manager.renew('shop.proxy.test');
+	const renewed = await valid('shop.proxy.test', shop);
 	Assert.notEqual(renewed, shop);
-	Assert.equal((await request({ port: edge.ports.https, secure: true, servername: 'shop.edge.test', host: 'shop.edge.test', ca: root })).status, 200);
+	Assert.equal((await request({ port: proxy.ports.https, secure: true, servername: 'shop.proxy.test', host: 'shop.proxy.test', ca: root })).status, 200);
 
 	// The challenges are cleaned up
-	Assert.equal(edge.challenges.size, 0);
-	Assert.equal(edge.dns.records.size, 0);
+	Assert.equal(proxy.challenges.size, 0);
+	Assert.equal(proxy.dns.records.size, 0);
 
 	// Restore a stopped instance's data under a different path and start a fresh process state.
-	const account = { kid: edge.acme.kid, thumbprint: edge.acme.thumbprint };
-	const bundleFile = Path.join(edge.config.data, 'certs', 'shop.edge.test.json');
+	const account = { kid: proxy.acme.kid, thumbprint: proxy.acme.thumbprint };
+	const bundleFile = Path.join(proxy.config.data, 'certs', 'shop.proxy.test.json');
 	const fingerprint = new Crypto.X509Certificate(JSON.parse(Fs.readFileSync(bundleFile, 'utf8')).cert).fingerprint256;
-	await edge.manager.running;
-	await edge.stop();
+	await proxy.manager.running;
+	await proxy.stop();
 	const restoredData = tmpdir();
 	let restored;
 	t.after(async () => {
@@ -181,17 +181,17 @@ Test('certificates from Pebble over HTTP and DNS', { timeout: 180000 }, async fu
 			await restored.stop();
 		Fs.rmSync(restoredData, { recursive: true, force: true });
 	});
-	Fs.cpSync(edge.config.data, restoredData, { recursive: true });
+	Fs.cpSync(proxy.config.data, restoredData, { recursive: true });
 	restored = await start({ data: restoredData, acme: DIRECTORY, acme_ca: ca });
 
-	Assert.deepEqual(restored.routes.list(), edge.routes.list());
+	Assert.deepEqual(restored.routes.list(), proxy.routes.list());
 	await restored.acme.init();
 	Assert.equal(restored.acme.kid, account.kid);
 	Assert.equal(restored.acme.thumbprint, account.thumbprint);
 	Assert.equal(Fs.statSync(Path.join(restoredData, 'acme', 'account.key')).mode & 0o777, 0o600);
 
 	const restoredFingerprint = await new Promise((resolve, reject) => {
-		const socket = Tls.connect({ host: '127.0.0.1', port: restored.ports.https, servername: 'shop.edge.test', ca: root }, () => {
+		const socket = Tls.connect({ host: '127.0.0.1', port: restored.ports.https, servername: 'shop.proxy.test', ca: root }, () => {
 			resolve(socket.getPeerCertificate().fingerprint256);
 			socket.end();
 		});

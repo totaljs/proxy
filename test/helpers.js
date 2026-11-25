@@ -7,10 +7,10 @@ const Http = require('node:http');
 const Https = require('node:https');
 const Child = require('node:child_process');
 const Config = require('../lib/config');
-const Edge = require('../lib/edge');
+const ProxyServer = require('../lib/server');
 
 exports.tmpdir = function() {
-	return Fs.mkdtempSync(Path.join(Os.tmpdir(), 'code-edge-'));
+	return Fs.mkdtempSync(Path.join(Os.tmpdir(), 'totaljs-proxy-'));
 };
 
 // A self-signed certificate made with OpenSSL, for the tests only
@@ -22,14 +22,14 @@ exports.selfsigned = function(folder, name, hosts) {
 	return { key: Fs.readFileSync(key), cert: Fs.readFileSync(crt) };
 };
 
-exports.edge = async function(overrides, routes) {
+exports.proxy = async function(overrides, routes) {
 	const data = (overrides && overrides.data) || exports.tmpdir();
 	if (routes)
 		Fs.writeFileSync(Path.join(data, 'routes.json'), JSON.stringify(routes));
-	const config = Config.load(null, Object.assign({ http: 0, https: 0, data, control: Path.join(data, 'edge.sock'), acme: 'https://127.0.0.1:9/directory', precheck: false }, overrides));
-	const edge = new Edge(config, { log: false });
-	await edge.start();
-	return edge;
+	const config = Config.load(null, Object.assign({ http: 0, https: 0, data, control: Path.join(data, 'proxy.sock'), acme: 'https://127.0.0.1:9/directory', precheck: false }, overrides));
+	const proxy = new ProxyServer(config, { log: false });
+	await proxy.start();
+	return proxy;
 };
 
 // A container stand-in: answers with what it received, echoes WebSockets

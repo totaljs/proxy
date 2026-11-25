@@ -6,7 +6,7 @@ const Fs = require('node:fs');
 const Path = require('node:path');
 const Child = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
-const { tmpdir, edge: start, request } = require('./helpers');
+const { tmpdir, proxy: start, request } = require('./helpers');
 const { snapshot, publish } = require('../scripts/docker-watch');
 
 function container(id, host, network = 'network') {
@@ -89,7 +89,7 @@ Test('Compose environment discovers multiple origins, a shared certificate and a
 	Assert.match(messages.join('\n'), /relative path inside custom_cert_dir/);
 });
 
-Test('Docker network events update Edge without overriding manual routes', { timeout: 26000 }, async function(t) {
+Test('Docker network events update Proxy without overriding manual routes', { timeout: 26000 }, async function(t) {
 	const folder = tmpdir();
 	const manual = Path.join(folder, 'routes.json');
 	const generated = Path.join(folder, 'routes.docker.json');
@@ -127,9 +127,9 @@ if (args[0] === 'events') {
 	const manualCollision = container('collision', 'manual.test');
 	const wildcardCollision = container('wildcard', 'app.reserved.test');
 	setState(1, [manualCollision, wildcardCollision]);
-	const edge = await start({ data: folder, routes_file: manual, docker_routes_file: generated });
+	const proxy = await start({ data: folder, routes_file: manual, docker_routes_file: generated });
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		Fs.rmSync(folder, { recursive: true, force: true });
 	});
 	const child = Child.spawn(process.execPath, [Path.join(__dirname, '../scripts/docker-watch.js'), 'proxy', generated], {
@@ -144,7 +144,7 @@ if (args[0] === 'events') {
 		await exited;
 	});
 	await until(() => Fs.existsSync(generated));
-	const read = async () => (await request({ socketPath: edge.config.control, path: '/routes' })).json;
+	const read = async () => (await request({ socketPath: proxy.config.control, path: '/routes' })).json;
 	Assert.deepEqual((await read()).map(route => route.id), ['manual']);
 
 	const shop = container('shop', 'unused-label.test');
@@ -155,7 +155,7 @@ if (args[0] === 'events') {
 	Assert.equal(active.length, 2);
 	Assert.equal(active.find(route => route.hosts.includes('shop.test')).accesslog, true);
 	Assert.equal(active.find(route => route.id === 'manual').target, 'http://manual:8000');
-	Assert.equal(edge.routes.lookup('app.reserved.test').route.id, 'manual');
+	Assert.equal(proxy.routes.lookup('app.reserved.test').route.id, 'manual');
 
 	setState(3, []);
 	await until(async () => (await read()).length === 1);

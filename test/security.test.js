@@ -1,7 +1,7 @@
 'use strict';
 
 // Names that redirect to any address, the page of a site while its app does not answer or is in maintenance, and the
-// settings of every site that Code changes (Settings → Security): addresses denied, the limit of requests of each
+// shared site settings: addresses denied, the limit of requests of each
 // address, the headers and HSTS of every site, the page of every site.
 
 const Test = require('node:test');
@@ -10,7 +10,7 @@ const Net = require('node:net');
 const Routes = require('../lib/routes');
 const Limiter = require('../lib/limiter');
 const Pages = require('../lib/pages');
-const { edge: start, backend: makebackend, request } = require('./helpers');
+const { proxy: start, backend: makebackend, request } = require('./helpers');
 
 function upgrade(port, host) {
 	return new Promise(function(resolve, reject) {
@@ -61,7 +61,7 @@ Test('the limit of requests of each address', function() {
 	Assert.equal(limiter.buckets.size, 0, 'full buckets are forgotten');
 });
 
-Test('the page of the edge in the language of the visitor', function() {
+Test('the page of the proxy in the language of the visitor', function() {
 	Assert.equal(Pages.language('es-ES,es;q=0.9,en;q=0.8'), 'es');
 	Assert.equal(Pages.language('en-US,en;q=0.9,es;q=0.8'), 'en');
 	Assert.equal(Pages.language(''), 'en');
@@ -72,19 +72,19 @@ Test('redirects, pages, maintenance and the settings of every site', async funct
 
 	const backend = await makebackend();
 	const target = 'http://127.0.0.1:' + backend.port;
-	const edge = await start({}, [
+	const proxy = await start({}, [
 		{ id: 'shop', hosts: ['shop.test'], target, tls: 'off', forwards: [{ host: 'old.test', to: 'https://shop.example.com/' }, { host: 'promo.test', to: 'https://shop.example.com/offer', path: false, permanent: false }] },
 		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off', page: '<h1>Resting</h1>' },
 		{ id: 'fixing', hosts: ['fixing.test'], target, tls: 'off', maintenance: true, page: '<h1>Fixing things</h1>' },
 		{ id: 'code', hosts: ['code.test'], target, tls: 'off', limit: false }
 	]);
-	edge.manager.stop();
-	const http = edge.ports.http;
-	const socketPath = edge.config.control;
+	proxy.manager.stop();
+	const http = proxy.ports.http;
+	const socketPath = proxy.config.control;
 	const api = (method, path, body) => request({ socketPath, method, path, body: body ? JSON.stringify(body) : undefined, headers: { 'content-type': 'application/json' } });
 
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
 
@@ -126,7 +126,7 @@ Test('redirects, pages, maintenance and the settings of every site', async funct
 		await api('PUT', '/routes/down', { hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off' });
 		Assert.equal((await request({ port: http, host: 'down.test' })).text, '<h1>Everybody rests</h1>');
 
-		// The limit: a few at once, then 429 with Retry-After; Code itself (limit off) never waits
+		// The limit: a few at once, then 429 with Retry-After; a route with limit off skips the rate limit
 		await api('PUT', '/settings', { ratelimit: { rate: 1, burst: 3 } });
 		const statuses = [];
 		for (let i = 0; i < 5; i++)
@@ -141,9 +141,9 @@ Test('redirects, pages, maintenance and the settings of every site', async funct
 		Assert.equal((await request({ port: http, host: 'code.test' })).status, 403);
 		Assert.match(await upgrade(http, 'shop.test'), /^HTTP\/1\.1 403/);
 
-		// Kept: the edge starts again with them
-		edge.settings.load();
-		Assert.deepEqual(edge.settings.get().deny, ['127.0.0.0/8']);
+		// Kept: the proxy starts again with them
+		proxy.settings.load();
+		Assert.deepEqual(proxy.settings.get().deny, ['127.0.0.0/8']);
 		await api('PUT', '/settings', {});
 		Assert.equal((await request({ port: http, host: 'shop.test' })).status, 200);
 	});
@@ -155,17 +155,17 @@ Test('standalone routes combine address restrictions, Basic auth and response he
 	const Guard = require('../lib/guard');
 	const auth = [{ user: 'ana', hash: Guard.hash('test-password') }];
 	const authorization = 'Basic ' + Buffer.from('ana:test-password').toString('base64');
-	const edge = await start({}, [
+	const proxy = await start({}, [
 		{ id: 'private', hosts: ['private.test'], target, allow: ['127.0.0.0/8', '2001:db8::/32'], auth, headers: { 'X-Frame-Options': 'SAMEORIGIN' } },
 		{ id: 'restricted', hosts: ['restricted.test'], redirects: ['alias.test'], target, allow: ['127.0.0.0/8'], deny: ['127.0.0.1'], auth },
 		{ id: 'office', hosts: ['office.test'], target, allow: ['10.0.0.0/8'] },
 		{ id: 'public', hosts: ['public.test'], target }
 	]);
 	t.after(async () => {
-		await edge.stop();
+		await proxy.stop();
 		backend.close();
 	});
-	const visit = (host, headers) => request({ port: edge.ports.http, host, headers });
+	const visit = (host, headers) => request({ port: proxy.ports.http, host, headers });
 	Assert.equal((await visit('office.test', { 'x-forwarded-for': '10.0.0.5' })).status, 403);
 	for (const host of ['restricted.test', 'alias.test'])
 		Assert.equal((await visit(host, { authorization })).status, 403);
@@ -180,7 +180,7 @@ Test('standalone routes combine address restrictions, Basic auth and response he
 	Assert.equal((await visit('public.test', { authorization })).json.headers.authorization, authorization);
 
 	const ws = host => new Promise((resolve, reject) => {
-		const socket = Net.connect(edge.ports.http, '127.0.0.1', () => {
+		const socket = Net.connect(proxy.ports.http, '127.0.0.1', () => {
 			socket.write('GET /live HTTP/1.1\r\nHost: ' + host + '\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
 		});
 		socket.once('error', reject);

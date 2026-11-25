@@ -44,14 +44,16 @@ Test('ACME renewal publishes the complete pair before changing the active certif
 	const folder = Path.join(root, 'certs');
 	const custom = Path.join(root, 'custom');
 	const host = 'shop.example.test';
-	selfsigned(folder, host, [host]);
+	const initial = selfsigned(Path.join(root, 'initial'), host, [host]);
 	const renewed = selfsigned(Path.join(root, 'renewed'), host, [host]);
 	const certs = new Certs(folder, custom);
+	certs.save(host, initial.key, initial.cert);
 	certs.load();
 	const previous = certs.find(host);
 	Assert.ok(previous);
 
 	const file = Path.join(folder, host + '.json');
+	Fs.unlinkSync(file);
 	Fs.mkdirSync(file);
 	Assert.throws(() => certs.save(host, renewed.key, renewed.cert));
 	Assert.equal(certs.find(host), previous);

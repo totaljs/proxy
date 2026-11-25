@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./app:/www
-      # Optional shared dependencies, as in Code.
+      # Optional shared dependencies.
       # - /srv/node_modules:/node_modules:ro
     environment:
       PROXY_HOST: http://hello.localhost

@@ -17,7 +17,7 @@ The `config` file, in the same `key : value` format as Total.js:
 | `custom_cert_dir` | `data/tls` | Directory for explicitly configured certificate and key paths. See [per-app TLS](tls.md). |
 | `routes_file` | | Read-only JSON array of routes, relative to the config file. Proxy checks for changes every five seconds. An invalid update leaves the last valid routes active. |
 | `docker_routes_file` | | Optional watchdog snapshot, relative to the config. Requires `routes_file`, whose routes take precedence. See [Docker discovery](docker-discovery.md). |
-| `control` | `control/proxy.sock` | The control API: a Unix socket (in a folder that Code shares with Proxy, apart from its keys), or `host:port` with a `token` |
+| `control` | `control/proxy.sock` | The control API: an owner-only Unix socket in a dedicated directory, or `host:port` with a `token` |
 | `token` | | Administrator token. Network control requires this token or scoped clients. |
 | `control_clients_file` | | JSON file of scoped tokens and allowed domains, relative to the config. See [Shared apps](shared-apps.md). |
 | `renew_days` | `30` | Days before expiry to renew |
@@ -38,7 +38,7 @@ The `config` file, in the same `key : value` format as Total.js:
 | `accesslog_maxsize` | `500` | Maximum MB per route file and day |
 | `stats_days` | `400` | Days the visits of the sites with `stats` are kept |
 
-ACME renewals store the private key and certificate chain in one owner-only file. Existing ACME certificate pairs still load. Back up the entire data volume together.
+ACME renewals store the private key and certificate chain in one owner-only file. Back up the entire data volume together.
 
 Running Proxy means accepting the terms of the ACME server in `acme`.
 

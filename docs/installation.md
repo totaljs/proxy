@@ -34,7 +34,7 @@ Allow time for `npm install` and the route to appear. Only Proxy publishes host 
 
 ### Choose how to manage routes
 
-Set `routes_file` to manage routes with a JSON file such as the example. Mount its containing directory read-only so Proxy can see both in-place edits and files replaced by an editor. If an existing setup mounts only the file, switch to a directory mount and recreate Proxy once. Route inspection and certificate operations remain available through the control socket. Leave `routes_file` empty when Code or another API client manages routes. Use a separate Proxy instance for standalone apps when Code manages the shared settings of its own instance.
+Set `routes_file` to manage routes with a JSON file such as the example. Mount its containing directory read-only so Proxy can see both in-place edits and files replaced by an editor. Route inspection and certificate operations remain available through the control socket. Leave `routes_file` empty to manage routes through the control API.
 
 ## Run with API-managed routes
 
@@ -65,6 +65,6 @@ volumes:
 
 Proxy and the project containers share the `proxy` network, so a route can point to a container by its name.
 
-The image runs as the `node` user and can bind the low ports. For Code, mount the same `proxy-control` volume at `/proxy/control` in both services and configure Code to use `/proxy/control/proxy.sock`. The socket is owner-only, so the client needs the owning UID or root access. Keep `proxy-data` mounted only in Proxy. For a bind mount instead of a named volume, make the host directory writable by the container’s `node` user.
+The image runs as the `node` user and can bind the low ports. Clients in another container can mount the `proxy-control` volume and connect to `/proxy/control/proxy.sock`. The socket is owner-only, so the client needs the owning UID or root access. Keep `proxy-data` mounted only in Proxy. For a bind mount instead of a named volume, make the host directory writable by the container’s `node` user.
 
 See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
