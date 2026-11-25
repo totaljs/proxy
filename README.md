@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/proxy-mark.svg" alt="Total.js Proxy logo" width="96" height="96">
+  <img src="https://raw.githubusercontent.com/totaljs/proxy/gh-pages/proxy-mark.svg" alt="Total.js Proxy logo" width="96" height="96">
 </p>
 
 <h1 align="center">Total.js Proxy</h1>
