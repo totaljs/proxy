@@ -7,7 +7,7 @@ services:
       - flow-streams:/www/.src/flowstream
 
   edge:
-    image: ghcr.io/totaljs-es/edge:${EDGE_VERSION:-latest}
+    image: ${PROXY_IMAGE:-totaljs-proxy:local}
     restart: unless-stopped
     ports:
       - "80:80"

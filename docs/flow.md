@@ -1,6 +1,6 @@
-# Deploy Total.js Flow with Edge
+# Deploy Total.js Flow with Proxy
 
-The [Flow example](../examples/flow) uses the official [Total.js Flow 11 image](https://github.com/totaljs/flow#flow-in-docker) and an Edge image with support for `tls: auto`. Compose creates a network where Edge can reach Flow at `http://flow:8000`. Only Edge publishes public ports. With the current source, build it from the repository root with `docker build -t totaljs-edge:source .` and set the Compose Edge service image to `totaljs-edge:source`.
+The [Flow example](../examples/flow) uses the official [Total.js Flow 11 image](https://github.com/totaljs/flow#flow-in-docker) and an Proxy image with support for `tls: auto`. Compose creates a network where Proxy can reach Flow at `http://flow:8000`. Only Proxy publishes public ports. With the current source, build it from the repository root with `docker build -t totaljs-proxy:local .`.
 
 1. **Set up Flow privately.** On the server, create a directory and copy [compose.yaml](../examples/flow/compose.yaml), [edge.conf](../examples/flow/edge.conf) and [routes.json](../examples/flow/routes.json) into it. From that directory, start a temporary Flow container bound to the server's loopback address:
 
@@ -22,8 +22,8 @@ The [Flow example](../examples/flow) uses the official [Total.js Flow 11 image](
    docker compose up -d
    ```
 
-3. **Check HTTPS.** Open `https://flow.example.com` with your real domain and check that Flow loads. If the certificate is still pending, check `docker compose logs edge`. Keep the named volumes for Flow's data and Edge's certificates.
+3. **Check HTTPS.** Open `https://flow.example.com` with your real domain and check that Flow loads. If the certificate is still pending, check `docker compose logs edge`. Keep the named volumes for Flow's data and Proxy's certificates.
 
-If Code already manages ports 80 and 443 on the server, deploy Flow as a Code project and set its domain in Code. The existing Edge will handle HTTPS.
+If Code already manages ports 80 and 443 on the server, deploy Flow as a Code project and set its domain in Code. The existing Proxy will handle HTTPS.
 
-See the [complete configuration example](examples.md) for the Edge config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.

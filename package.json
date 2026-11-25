@@ -1,5 +1,5 @@
 {
-	"name": "totaljs-edge",
+	"name": "totaljs-proxy",
 	"version": "0.1.1",
 	"description": "Publish Total.js apps with hostname routing and automatic HTTPS",
 	"main": "index.js",

@@ -1,4 +1,4 @@
-# Test Total.js Edge
+# Test Total.js Proxy
 
 Run the full suite from the repository root:
 
@@ -16,4 +16,4 @@ This covers route creation and removal, live reload from `routes.json` and two s
 
 See the [Pebble README](../test/pebble/README.md) for the isolated ACME integration test and local debugging instructions.
 
-See the [complete configuration example](examples.md) for the Edge config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.

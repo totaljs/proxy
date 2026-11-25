@@ -5,7 +5,7 @@ const Http = require('node:http');
 const Https = require('node:https');
 const { performance } = require('node:perf_hooks');
 
-const BODY = 'Hello from Total.js behind Total.js Edge.';
+const BODY = 'Hello from Total.js behind Total.js Proxy.';
 
 async function run(protocol, port, seconds, concurrency, certificate) {
 	const secure = protocol === 'https';

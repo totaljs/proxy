@@ -1,4 +1,4 @@
-# Configure Total.js Edge
+# Configure Total.js Proxy
 
 ## Config
 
@@ -15,7 +15,7 @@ The `config` file, in the same `key : value` format as Total.js:
 | `dns_ns` | | The name of this server in the NS record, for example `ns.code.example.com` |
 | `data` | `data` | Routes, certificates and the account |
 | `custom_cert_dir` | `data/tls` | Directory for explicitly configured certificate and key paths. See [per-app TLS](tls.md). |
-| `routes_file` | | Read-only JSON array of routes, relative to the config file. Edge checks for changes every five seconds. An invalid update leaves the last valid routes active. |
+| `routes_file` | | Read-only JSON array of routes, relative to the config file. Proxy checks for changes every five seconds. An invalid update leaves the last valid routes active. |
 | `docker_routes_file` | | Optional watchdog snapshot, relative to the config. Requires `routes_file`, whose routes take precedence. See [Docker discovery](docker-discovery.md). |
 | `control` | `control/edge.sock` | The control API: a Unix socket (in a folder that Code shares with the edge, apart from its keys), or `host:port` with a `token` |
 | `token` | | Administrator token. Network control requires this token or scoped clients. |
@@ -85,11 +85,11 @@ A route with `stats: true` counts its visits, in `data/stats/<route>/<YYYY-MM-DD
 salt that changes every day and is never written, so the addresses cannot be read back, and a visitor of one day cannot
 be followed to the next.
 
-The unique-visitor count is capped at 50,000 per route and 500,000 across Edge per UTC day. When the limit is reached, `visitors_capped` is set and page views continue to count.
+The unique-visitor count is capped at 50,000 per route and 500,000 across Proxy per UTC day. When the limit is reached, `visitors_capped` is set and page views continue to count.
 
 Each day records page views and visitors (people only), by hour too; each page with its views and its time to answer; the
 other sites the visits come from (host only); the status codes; the pages that answered 404 and 5xx; and the search
 engines (Googlebot, Bingbot…), AI agents (GPTBot, ClaudeBot, PerplexityBot…) and other bots, with the pages each one read
 and when it came last. The files of a page (scripts, styles, images, fonts) and redirects are not page views.
 
-See the [complete configuration example](examples.md) for the Edge config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.

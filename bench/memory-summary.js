@@ -19,7 +19,7 @@ const samples = jsonl('edge-node.jsonl');
 if (!samples.some(row => row.kind === 'forced-gc'))
 	throw new Error('Missing the final Node memory sample');
 
-console.log('# Edge and NGINX memory across two load cycles');
+console.log('# Proxy and NGINX memory across two load cycles');
 console.log('\nThe container column is the peak sampled by Docker. Node columns use the **last sample** of each interval, so recovery values can be compared directly. External includes ArrayBuffers. These columns overlap and should not be added.\n');
 console.log('| Proxy | Phase | OK req/s | Errors | CPU avg % | Container peak MiB | Node RSS MiB | Anonymous RSS MiB | Heap used MiB | External MiB | ArrayBuffers MiB | Active / idle / queued sockets |');
 console.log('|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|');

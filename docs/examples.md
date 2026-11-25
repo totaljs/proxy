@@ -1,8 +1,8 @@
 # Complete configuration example
 
-This deployment puts three apps behind one Edge. The shop requests a Let's Encrypt certificate, the preview uses HTTP, and the portal uses a certificate you supply. It also shows a hostname redirect, access logs and visit statistics. Replace the example domains and upstreams with your own.
+This deployment puts three apps behind one Proxy. The shop requests a Let's Encrypt certificate, the preview uses HTTP, and the portal uses a certificate you supply. It also shows a hostname redirect, access logs and visit statistics. Replace the example domains and upstreams with your own.
 
-## Edge config
+## Proxy config
 
 Save as `edge.conf`. Blank optional values leave their features disabled. Relative paths are resolved from the config location.
 
@@ -106,23 +106,23 @@ Save as `routes.json`. JSON files use strict JSON. The notes below explain the f
 ]
 ```
 
-- **Shop** redirects the `www` alias to the primary hostname and sends the old hostname to `/store`, preserving the requested path. Logs go under `data/access/shop/`. HTTP-01 validation needs all three hostnames to resolve to Edge.
+- **Shop** redirects the `www` alias to the primary hostname and sends the old hostname to `/store`, preserving the requested path. Logs go under `data/access/shop/`. HTTP-01 validation needs all three hostnames to resolve to Proxy.
 - **Preview** allows only the example network and excludes one address. Replace both addresses with your own. The custom page appears when the upstream is unavailable. Set `maintenance` to `true` to show it immediately.
 - **Portal** uses the certificate in `data/tls/portal/fullchain.pem` and its matching `data/tls/portal/privkey.pem`. See [custom TLS](tls.md) and the [route fields](control-api.md) and the [access guide](access.md) for HTTP Basic authentication.
 
 ## Compose YAML
 
-Save as `compose.yaml` alongside the other files. Copy the [Total.js demo app directory](../examples/totaljs/app) alongside them as `app/`. All three services build the same demo and are reachable by service name on the Compose network. Replace each `build` with your own app image or build context when adapting the example.
+Build the image with `docker build -t totaljs-proxy:local .` from the repository root. Save the following as `compose.yaml` alongside the other files. Copy the [Total.js demo app directory](../examples/totaljs/app) alongside them as `app/`. All three services build the same demo and are reachable by service name on the Compose network. Replace each `build` with your own app image or build context when adapting the example.
 
 ```yaml
 services:
   edge:
-    # Use an Edge build that supports the configuration above.
-    image: ghcr.io/totaljs-es/edge:${EDGE_VERSION:-latest}
+    # Use an Proxy build that supports the configuration above.
+    image: ${PROXY_IMAGE:-totaljs-proxy:local}
     restart: unless-stopped
     command: ["node", "index.js", "edge.conf"]
     ports:
-      # Only Edge publishes the public HTTP and HTTPS ports.
+      # Only Proxy publishes the public HTTP and HTTPS ports.
       - "80:80"
       - "443:443"
       # For DNS challenges, publish "53:53/tcp" and "53:53/udp".
@@ -154,4 +154,4 @@ volumes:
   edge-data:
 ```
 
-Point the public hostnames to Edge, install the portal certificate and run `docker compose up -d`. For a complete Compose project that also launches its backend, see [Deploy Total.js Flow](flow.md). Verify the shop with `curl -I https://shop.example.com/` and check certificate progress in `docker compose logs edge`.
+Point the public hostnames to Proxy, install the portal certificate and run `docker compose up -d`. For a complete Compose project that also launches its backend, see [Deploy Total.js Flow](flow.md). Verify the shop with `curl -I https://shop.example.com/` and check certificate progress in `docker compose logs edge`.

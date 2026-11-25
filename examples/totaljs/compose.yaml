@@ -1,6 +1,6 @@
 services:
   edge:
-    image: totaljs-edge:0.1.1
+    image: totaljs-proxy:local
     build: ../..
     restart: unless-stopped
     ports:

@@ -73,7 +73,7 @@ ready() {
     curl_args+=(--cacert "$BENCH_TLS_DIR/cert.pem")
   fi
   for ((i=0; i<30; i++)); do
-    if [[ $(curl "${curl_args[@]}" "$protocol://bench.test:$port/" 2>/dev/null) == 'Hello from Total.js behind Total.js Edge.' ]]; then
+    if [[ $(curl "${curl_args[@]}" "$protocol://bench.test:$port/" 2>/dev/null) == 'Hello from Total.js behind Total.js Proxy.' ]]; then
       return 0
     fi
     sleep 1

@@ -1,4 +1,4 @@
-# Total.js Edge control API
+# Total.js Proxy control API
 
 JSON over HTTP, on the Unix socket in `control/edge.sock` (only its owner can open it):
 
@@ -42,7 +42,7 @@ A route:
 | `page` | | The HTML of the page of this site while its container does not answer, or in maintenance (512 KB at most) |
 | `maintenance` | `false` | The page for every request, even when the container answers |
 | `limit` | `true` | `false`: the limit of requests of the settings does not apply (Code itself) |
-| `https` | `true` | With TLS enabled, Edge redirects HTTP to HTTPS once a usable certificate is available. Until then, it serves a temporary 503 and keeps ACME validation available. Set `https: false` to explicitly allow HTTP or `tls: off` to disable TLS. |
+| `https` | `true` | With TLS enabled, Proxy redirects HTTP to HTTPS once a usable certificate is available. Until then, it serves a temporary 503 and keeps ACME validation available. Set `https: false` to explicitly allow HTTP or `tls: off` to disable TLS. |
 | `hsts` | `false` | Sends `Strict-Transport-Security` |
 | `accesslog` | the config | Enable or disable HTTP access logging for this route when a deployment destination is configured. |
 | `accesslog_dir` | | Relative subdirectory for this route's daily file, inside the deployment access log directory. Ignored when logging to stdout. |
@@ -73,4 +73,4 @@ The settings of every site, kept in `data/settings.json` (Code sends them from S
 
 The state of each certificate is also kept in `data/status.json`: `valid`, `requesting`, `waiting-dns` (with the record to create) or `error` (with the reason and the time of the next try).
 
-See the [complete configuration example](examples.md) for the Edge config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.

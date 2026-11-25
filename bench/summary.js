@@ -25,7 +25,7 @@ const rows = Fs.readFileSync(process.argv[2], 'utf8').trim().split('\n').map(lin
 });
 
 if (process.argv[3] === 'diagnose') {
-	console.log('# Edge 503 diagnostics');
+	console.log('# Proxy 503 diagnostics');
 	console.log('\nUpstream events include the warm-up of each Edge container. The measured response counts exclude warm-up.\n');
 	console.log('| Target | Protocol | Clients | Seconds | OK req/s | p95 ms | p99 ms | Client failures | Edge upstream events |');
 	console.log('|---|---|---:|---:|---:|---:|---:|---|---|');
@@ -40,7 +40,7 @@ if (process.argv[3] === 'diagnose') {
 }
 
 if (process.argv[3] === 'capacity') {
-	console.log('# Edge capacity');
+	console.log('# Proxy capacity');
 	console.log('\nEach row is one load interval. CPU and RAM are sampled for Edge alone. Latencies include successful responses only.\n');
 	console.log('| Config | Protocol | Clients | Seconds | OK req/s | p95 ms | p99 ms | Errors | HTTP status / transport | CPU % | Peak RAM MiB |');
 	console.log('|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|');
@@ -55,7 +55,7 @@ if (process.argv[3] === 'capacity') {
 const ab = process.argv[3] === 'ab';
 const nginx = process.argv[3] === 'nginx';
 const workers = process.argv[3] === 'workers';
-console.log(workers ? '# Edge workers vs NGINX' : ab ? '# Edge A/B' : nginx ? '# Edge vs NGINX' : '# Edge vs NGINX vs Caddy');
+console.log(workers ? '# Proxy workers vs NGINX' : ab ? '# Proxy A/B' : nginx ? '# Proxy vs NGINX' : '# Proxy vs NGINX vs Caddy');
 if (ab || nginx || workers) {
 	console.log('\nMedians across short rounds, plus one 60-second HTTPS interval per version. Edge used a per-route active-request limit of 1,024. Latency covers successful responses. CPU is the average per interval in Docker percent, where 100% is one core. RAM is the sampled peak.\n');
 	console.log('| Version | Protocol | Clients | Rounds | OK req/s | p95 ms | p99 ms | Errors | HTTP 503 | Transport | Error % | CPU % | Peak RAM MiB |');

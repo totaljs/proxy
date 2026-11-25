@@ -1,6 +1,6 @@
 FROM node:24-alpine
 
-LABEL org.opencontainers.image.title="Total.js Edge" \
+LABEL org.opencontainers.image.title="Total.js Proxy" \
       org.opencontainers.image.description="Hostname routing and automatic HTTPS for your apps"
 
 # Low ports without root

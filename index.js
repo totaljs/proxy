@@ -1,6 +1,6 @@
 'use strict';
 
-// Total.js Edge
+// Total.js Proxy
 // node index.js [config]
 
 const Config = require('./lib/config');

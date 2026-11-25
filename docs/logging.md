@@ -1,15 +1,15 @@
-# Logging in Total.js Edge
+# Logging in Total.js Proxy
 
 | Log | What it records | Default |
 | --- | --- | --- |
 | Access | Completed HTTP requests, with the client IP, domain, method, URL, response status, duration and user agent | Off |
 | Operational | Startup, route changes and certificate events, including failures | Container output |
 
-This guide covers the current Edge source. These logging options are pending a new Docker image. To try them now, use the [source build](installation.md#build-from-source-with-a-totaljs-example).
+This guide covers the current Proxy source. These logging options are pending a new Docker image. To try them now, use the [source build](installation.md#build-from-source-with-a-totaljs-example).
 
 ## Configure a deployment
 
-Add these settings to the Edge service in your Compose file. This sends operational events to daily files and enables access logging only on routes that opt in.
+Add these settings to the Proxy service in your Compose file. This sends operational events to daily files and enables access logging only on routes that opt in.
 
 ```yaml
 services:
@@ -52,7 +52,7 @@ Each route file has its own daily size limit. Unmatched requests go into `access
 
 ## Keep a log alongside the app
 
-Add a bind mount to the Edge service alongside its existing data volume.
+Add a bind mount to the Proxy service alongside its existing data volume.
 
 ```yaml
 volumes:
@@ -60,10 +60,10 @@ volumes:
   - ./apps/flow/logs:/edge/data/access/flow
 ```
 
-Create the host directory and make it writable by Edge’s container user. In this example the log appears under `./apps/flow/logs` on the host.
+Create the host directory and make it writable by Proxy’s container user. In this example the log appears under `./apps/flow/logs` on the host.
 
 ## Diagnose a custom certificate
 
-Check the operational log for the affected hostname and reason, or read `GET /status` through the [control socket](control-api.md). Edge checks the [paths configured for that app](tls.md#configure-certificates-in-compose) or discovers a PEM-encoded `.crt` or `.pem` and matching `.key` in `data/custom/`. A missing, expired or invalid custom certificate affects the corresponding hostname. Other routes continue serving.
+Check the operational log for the affected hostname and reason, or read `GET /status` through the [control socket](control-api.md). Proxy checks the [paths configured for that app](tls.md#configure-certificates-in-compose) or discovers a PEM-encoded `.crt` or `.pem` and matching `.key` in `data/custom/`. A missing, expired or invalid custom certificate affects the corresponding hostname. Other routes continue serving.
 
-See the [complete configuration example](examples.md) for the Edge config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
