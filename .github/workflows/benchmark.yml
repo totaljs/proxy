@@ -1,0 +1,51 @@
+name: Proxy benchmark smoke test
+
+on:
+  push:
+    branches: [bench]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the benchmark
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check out Total.js Proxy
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          path: proxy-source
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      - name: Run a short comparison
+        env:
+          PROXY_SOURCE: ${{ github.workspace }}/proxy-source
+          BENCH_ROUNDS: '1'
+          BENCH_SECONDS: '2'
+        run: bash bench/run.sh
+
+      - name: Add the results to the run summary
+        if: always()
+        run: |
+          if test -f bench/results/summary.md; then
+            cat bench/results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: proxy-benchmark
+          path: bench/results/
+          if-no-files-found: warn

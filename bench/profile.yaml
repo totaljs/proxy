@@ -3,7 +3,7 @@ services:
     command:
       - node
       - --cpu-prof
-      - --cpu-prof-dir=/edge/data
+      - --cpu-prof-dir=/proxy/data
       - --cpu-prof-name=${BENCH_PROFILE_NAME:?Set BENCH_PROFILE_NAME}
       - index.js
-      - bench/edge.conf
+      - bench/proxy.conf

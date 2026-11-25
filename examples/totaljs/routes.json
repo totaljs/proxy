@@ -1,8 +1,0 @@
-[
-  {
-    "id": "hello",
-    "hosts": ["hello.localhost"],
-    "target": "http://app:8000",
-    "tls": "off"
-  }
-]

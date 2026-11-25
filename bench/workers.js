@@ -3,7 +3,7 @@
 const Cluster = require('node:cluster');
 const Path = require('node:path');
 const Config = require('../lib/config');
-const Edge = require('../lib/edge');
+const Edge = require('../lib/server');
 
 const workers = Number(process.env.BENCH_EDGE_WORKERS || 1);
 if (![1, 2].includes(workers))

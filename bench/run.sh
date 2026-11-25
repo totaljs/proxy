@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+: "${PROXY_SOURCE:?Point PROXY_SOURCE at a separate checkout of Total.js Proxy}"
+PROXY_SOURCE=$(cd "$PROXY_SOURCE" && pwd -P)
+export PROXY_SOURCE
+proxy_revision=$(git -C "$PROXY_SOURCE" rev-parse --verify HEAD)
+[[ -f "$PROXY_SOURCE/lib/server.js" && -f "$PROXY_SOURCE/Dockerfile" ]] || { echo "PROXY_SOURCE must contain the Proxy product" >&2; exit 1; }
 
 seconds=${BENCH_SECONDS:-8}
 rounds=${BENCH_ROUNDS:-3}
@@ -15,7 +20,7 @@ output=bench/results
 mkdir -p "$output"
 export BENCH_TLS_DIR BENCH_EDGE_CONFIG BENCH_EDGE_IMAGE
 BENCH_TLS_DIR=$(mktemp -d)
-BENCH_EDGE_CONFIG="$PWD/bench/edge.conf"
+BENCH_EDGE_CONFIG="$PWD/bench/proxy.conf"
 current_image="edge-bench-$$:current"
 baseline_image="edge-bench-$$:baseline"
 BENCH_EDGE_IMAGE="$current_image"
@@ -57,7 +62,7 @@ elif [[ $mode == nginx || $mode == workers || $mode == memory ]]; then
 fi
 "${compose[@]}" up -d --no-deps app
 {
-  git rev-parse HEAD
+  printf 'Benchmark: %s\nProxy source: %s\n' "$(git rev-parse HEAD)" "$proxy_revision"
   node --version
   uname -a
   docker version --format '{{.Server.Version}}'
@@ -106,7 +111,7 @@ measure() {
 
 use_wide_limit() {
   BENCH_EDGE_CONFIG="$BENCH_TLS_DIR/edge-wide.conf"
-  cp bench/edge.conf "$BENCH_EDGE_CONFIG"
+  cp bench/proxy.conf "$BENCH_EDGE_CONFIG"
   printf '\nhttp_active : 2048\nhttp_active_per_route : 1024\n' >> "$BENCH_EDGE_CONFIG"
 }
 
@@ -251,10 +256,10 @@ JS
 fi
 
 if [[ $mode == ab ]]; then
-  baseline=${BENCH_BASELINE:-5938ebb68d19037962b6d94cc9816030de794b79}
-  git archive "$baseline" | docker build -t "$baseline_image" -
+  baseline=${BENCH_BASELINE:?Set BENCH_BASELINE to a Proxy commit available in PROXY_SOURCE}
+  git -C "$PROXY_SOURCE" archive "$baseline" | docker build -t "$baseline_image" -
   use_wide_limit
-  printf 'Baseline: %s\nCandidate: %s\n' "$baseline" "$(git rev-parse HEAD)" >> "$output/environment.txt"
+  printf 'Baseline: %s\nCandidate: %s\n' "$baseline" "$proxy_revision" >> "$output/environment.txt"
   for ((round=1; round<=rounds; round++)); do
     variants=(baseline candidate)
     if (( round % 2 == 0 )); then
@@ -318,7 +323,7 @@ if [[ $mode == capacity ]]; then
     ready "$protocol" "$port"
     BENCH_CERT="$BENCH_TLS_DIR/cert.pem" node bench/load.js "$protocol" "$port" 8 128 >/dev/null
     "${profile[@]}" stop edge
-    "${profile[@]}" cp "edge:/edge/data/$BENCH_PROFILE_NAME" "$output/$BENCH_PROFILE_NAME"
+    "${profile[@]}" cp "edge:/proxy/data/$BENCH_PROFILE_NAME" "$output/$BENCH_PROFILE_NAME"
   done
   [[ $(wc -l < "$output/index.tsv") -eq 17 ]] || { echo "Incomplete capacity measurements" >&2; exit 1; }
   node bench/summary.js "$output/index.tsv" capacity | tee "$output/summary.md"

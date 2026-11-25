@@ -4,7 +4,7 @@
 const Fs = require('node:fs');
 const V8 = require('node:v8');
 const Config = require('../lib/config');
-const Edge = require('../lib/edge');
+const Edge = require('../lib/server');
 
 const edge = new Edge(Config.load(process.argv[2]));
 const count = entries => Object.values(entries).reduce((sum, list) => sum + list.length, 0);

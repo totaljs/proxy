@@ -1,5 +1,5 @@
 services:
   edge:
-    command: ["node", "--require", "/edge/bench/diagnose.js", "index.js", "bench/edge.conf"]
+    command: ["node", "--require", "/proxy/bench/diagnose.js", "index.js", "bench/proxy.conf"]
     volumes:
-      - ./diagnose.js:/edge/bench/diagnose.js:ro
+      - ./diagnose.js:/proxy/bench/diagnose.js:ro

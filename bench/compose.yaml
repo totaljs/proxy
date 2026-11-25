@@ -1,21 +1,21 @@
 services:
   app:
-    build: ../examples/totaljs/app
+    build: ${PROXY_SOURCE:?Set PROXY_SOURCE}/examples/totaljs/app
     ports:
       - "127.0.0.1:18081:8000"
 
   edge:
     image: ${BENCH_EDGE_IMAGE:?Set BENCH_EDGE_IMAGE}
-    build: ..
-    command: ["node", "index.js", "bench/edge.conf"]
+    build: ${PROXY_SOURCE:?Set PROXY_SOURCE}
+    command: ["node", "index.js", "bench/proxy.conf"]
     ports: &proxy_ports
       - "127.0.0.1:18080:8080"
       - "127.0.0.1:18443:8443"
     volumes:
-      - ${BENCH_EDGE_CONFIG:-./edge.conf}:/edge/bench/edge.conf:ro
-      - ./routes.json:/edge/bench/routes.json:ro
-      - ${BENCH_TLS_DIR:?Set BENCH_TLS_DIR}:/edge/bench/tls:ro
-      - edge-data:/edge/data
+      - ${BENCH_EDGE_CONFIG:-./proxy.conf}:/proxy/bench/proxy.conf:ro
+      - ./routes.json:/proxy/bench/routes.json:ro
+      - ${BENCH_TLS_DIR:?Set BENCH_TLS_DIR}:/proxy/bench/tls:ro
+      - edge-data:/proxy/data
 
   nginx:
     image: nginx:1.28.0-alpine

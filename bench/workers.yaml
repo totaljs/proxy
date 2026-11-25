@@ -1,7 +1,7 @@
 services:
   edge:
-    command: ["node", "bench/workers.js", "bench/edge.conf"]
+    command: ["node", "bench/workers.js", "bench/proxy.conf"]
     environment:
       BENCH_EDGE_WORKERS: "${BENCH_EDGE_WORKERS:-1}"
     volumes:
-      - ./workers.js:/edge/bench/workers.js:ro
+      - ./workers.js:/proxy/bench/workers.js:ro
