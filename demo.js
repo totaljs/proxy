@@ -5,19 +5,19 @@ const examples = {
     file: 'Docker network',
     kind: 'Address',
     code: '# Use the service name and its internal port\nhttp://flow:8000',
-    note: 'Edge and Flow share a Docker network. Edge reaches the app by its service name.'
+    note: 'Proxy and Flow share a Docker network. Proxy reaches the app by its service name.'
   },
   domain: {
     file: 'routes.json',
     kind: 'JSON',
     code: '[\n  {\n    "id": "flow",\n    "hosts": ["flow.example.com"],\n    "target": "http://flow:8000",\n    "tls": "auto"\n  }\n]',
-    note: 'Point your domain’s DNS record at the server and add the route. Then start Edge with Docker Compose.'
+    note: 'Point your domain’s DNS record at the server and add the route. Then start Proxy with Docker Compose.'
   },
   https: {
     file: 'Public HTTPS',
     kind: 'URL',
     code: '# Open the app when the certificate is ready\nhttps://flow.example.com/',
-    note: 'Edge handles the Let’s Encrypt challenge and renews the certificate before it expires.'
+    note: 'Proxy handles the Let’s Encrypt challenge and renews the certificate before it expires.'
   }
 };
 
