@@ -9,7 +9,7 @@ This example runs two copies of Flow on one Proxy. The operations copy keeps a h
 
 ## Configure Proxy
 
-Use an Proxy build that supports `docker_routes_file`. To build from the source checkout, run `docker build -t edge-discovery .` and set the Proxy service image to `edge-discovery`.
+Use a Proxy build that supports `docker_routes_file`. To build from the source checkout, run `docker build -t edge-discovery .` and set the Proxy service image to `edge-discovery`.
 
 In the Proxy config, add these two settings:
 
@@ -29,6 +29,41 @@ services:
 ```
 
 This example assumes the config is at `/edge/edge.conf` and Proxy is already attached to `proxy`. Keep your existing config and data mounts. Mount the directories so that atomic file replacement is visible inside the container. The generated file can be missing at startup. This setup uses file-managed routing. The control API still lists routes and certificate status.
+
+## Declare domains in the app Compose file
+
+Use the same environment variables in a generated Compose file. The working [Total.js example](../examples/totaljs/compose.yaml) shows the standalone setup. The following is a generator template. Substitute the app ID and the host paths for `www` and `npm` before running Compose.
+
+```yaml
+services:
+  app:
+    container_name: "{{ value.id }}"
+    image: totalplatform/run:npm
+    restart: always
+    volumes:
+      - "{{ value.www }}:/www"
+      - "{{ value.npm }}:/node_modules:ro"
+    environment:
+      PROXY_HOST: "https://example.com,https://www.example.com"
+      PROXY_PORT: "80"
+      # Optional directory under Proxy's custom_cert_dir.
+      # PROXY_CERT: shared/example
+      PROXY_LOGS: "true"
+    networks: [proxy]
+
+networks:
+  proxy:
+    external: true
+```
+
+| Variable | What it configures |
+| --- | --- |
+| `PROXY_HOST` | Comma-separated hostnames or HTTP(S) origins without paths or ports. `https://` selects automatic certificates, and `http://` selects HTTP. A bare hostname uses HTTP unless a custom certificate is configured. |
+| `PROXY_PORT` | The actual HTTP port inside the app container, defaulting to 80. The app must listen on this port. Use 8000 for apps that listen there. |
+| `PROXY_CERT` | Optional directory relative to Proxy's `custom_cert_dir`. Proxy uses `fullchain.pem` and `privkey.pem` from that directory for HTTPS or bare host entries. Multiple apps can reference the same wildcard certificate. Mount these files into Proxy. |
+| `PROXY_LOGS` | Set to `true` to enable or `false` to disable per-route access logs. Proxy needs a configured access log destination. |
+
+Existing containers can still use the `edge.host`, `edge.port` and `edge.tls` labels. A container with `PROXY_HOST` uses its environment configuration. Hand-written routes keep priority in both cases.
 
 ## Add one route by hand
 

@@ -1,0 +1,10 @@
+{
+  "name": "totaljs-proxy-example",
+  "private": true,
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "total5": "0.0.20-6"
+  }
+}

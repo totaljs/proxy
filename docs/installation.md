@@ -13,24 +13,24 @@ Before starting, edit `deploy/routes.json` with your domains and upstream addres
 
 Keep the `edge-data` volume between upgrades. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image. Proxy checks file-managed routes for changes every five seconds.
 
-## Build from source with a Total.js example
+## Run a Total.js app from its Compose file
 
-From the repository root, run:
+The [Total.js example](../examples/totaljs) uses `totalplatform/run:npm` and declares its domain, internal port and access logging in the app's Compose environment. Set up the shared Proxy and Docker discovery once from the repository root:
 
 ```sh
-docker compose -f examples/totaljs/compose.yaml up --build -d
+docker network inspect proxy >/dev/null 2>&1 || docker network create proxy
+docker compose -p proxy-demo -f examples/totaljs/proxy.compose.yaml up --build -d
+node scripts/docker-watch.js proxy examples/totaljs/routes.docker.json
+```
+
+Leave the watchdog running. In a second terminal, start the app and check it over HTTP:
+
+```sh
+docker compose -p proxy-demo-app -f examples/totaljs/compose.yaml up -d
 curl --resolve hello.localhost:80:127.0.0.1 http://hello.localhost/
 ```
 
-The example includes a Total.js app on port 8000 and builds a local image tagged `totaljs-proxy:local`. Only Proxy publishes host ports. The first request may return 503 while the example app starts. Retry once it is ready.
-
-To go public, point your domain at the server, allow inbound TCP ports 80 and 443, and replace `hello.localhost` in [the example routes](../examples/totaljs/routes.json) with your domain. Set `"tls": "auto"` to enable Let's Encrypt. Check certificate status after Proxy picks up the updated route:
-
-```sh
-docker compose -f examples/totaljs/compose.yaml exec edge node -e 'require("node:http").get({socketPath:"/edge/control/edge.sock",path:"/status"},res=>res.pipe(process.stdout))'
-```
-
-The status lists certificates and any issuance errors. Keep the `edge-data` volume across deploys to preserve your certificates and ACME account. To serve your own app, change the `app` service and set `target` to its HTTP address on the Compose network.
+Allow time for `npm install` and the route to appear. Only Proxy publishes host ports. To add another app, give its service a distinct container name, attach it to `proxy` and set its own `PROXY_HOST`. For public HTTPS, use a real domain with the `https://` prefix and point its DNS at Proxy. See [Docker discovery](docker-discovery.md) for multiple hostnames, custom certificates and access logs.
 
 ### Choose how to manage routes
 

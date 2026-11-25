@@ -12,6 +12,57 @@ const Hosts = require('../lib/hosts');
 const Routes = require('../lib/routes');
 const execFile = promisify(Child.execFile);
 
+function containerRoutes(container) {
+	const labels = container.Config.Labels || {};
+	const env = new Map((container.Config.Env || []).filter(value => /^PROXY_(HOST|PORT|CERT|LOGS)=/.test(value))
+		.map(value => [value.slice(0, value.indexOf('=')), value.slice(value.indexOf('=') + 1)]));
+	const fromEnv = env.has('PROXY_HOST');
+	const hosts = fromEnv ? env.get('PROXY_HOST').split(',') : [labels['edge.host']];
+	if (!fromEnv && !hosts[0])
+		return [];
+	if (hosts.length > 50)
+		throw new Error('PROXY_HOST supports up to 50 hostnames');
+
+	const port = fromEnv ? (env.get('PROXY_PORT') || '80') : labels['edge.port'];
+	const name = container.Name.substring(1);
+	if (!/^[0-9]{1,5}$/.test(port || '') || +port < 1 || +port > 65535 || !/^[a-z0-9][a-z0-9_-]*$/i.test(name))
+		throw new Error('Invalid upstream port or Docker container name');
+
+	const logs = fromEnv && env.has('PROXY_LOGS') ? env.get('PROXY_LOGS').toLowerCase() : '';
+	if (logs && logs !== 'true' && logs !== 'false')
+		throw new Error('PROXY_LOGS must be true or false');
+	const certificate = fromEnv ? env.get('PROXY_CERT') : '';
+	const routes = new Map();
+	for (const item of hosts) {
+		const value = item.trim();
+		const scheme = fromEnv ? /^https?:\/\//i.exec(value)?.[0].toLowerCase() : '';
+		const host = Hosts.normalize(value.slice(scheme?.length || 0));
+		if (!Hosts.valid(host, false))
+			throw new Error('Expected a hostname or an HTTP(S) origin without a port or path');
+		let tls = labels['edge.tls'] || 'off';
+		if (fromEnv) {
+			tls = 'off';
+			if (scheme !== 'http://' && certificate)
+				tls = 'custom';
+			else if (scheme === 'https://')
+				tls = 'auto';
+		}
+		const id = 'docker-' + Crypto.createHash('sha256').update(host).digest('hex').substring(0, 40);
+		const input = { id, hosts: [host], target: 'http://' + name + ':' + port, tls };
+		if (logs)
+			input.accesslog = logs === 'true';
+		if (tls === 'custom' && certificate) {
+			input.cert_file = certificate + '/fullchain.pem';
+			input.key_file = certificate + '/privkey.pem';
+		}
+		const route = Routes.clean(Routes.validate(input));
+		if (routes.has(host) && routes.get(host).tls !== route.tls)
+			throw new Error('Conflicting TLS modes for hostname ' + host);
+		routes.set(host, route);
+	}
+	return [...routes.values()];
+}
+
 async function snapshot(network, docker, log) {
 	let info;
 	try {
@@ -29,30 +80,20 @@ async function snapshot(network, docker, log) {
 	for (let i = 0; i < ids.length; i += 50) {
 		const containers = await docker(['inspect', '--type', 'container', '--', ...ids.slice(i, i + 50)]);
 		for (const container of containers) {
-			const labels = container.Config.Labels || {};
 			const entry = container.NetworkSettings.Networks[info.Name];
-			if (!labels['edge.host'] || !container.State.Running || entry?.NetworkID !== info.Id)
+			if (!container.State.Running || entry?.NetworkID !== info.Id)
 				continue;
-
-			const host = Hosts.normalize(labels['edge.host']);
-			const port = labels['edge.port'];
-			const name = container.Name.substring(1);
-			if (!Hosts.valid(host, false) || !/^[0-9]{1,5}$/.test(port || '') || +port < 1 || +port > 65535 || !/^[a-z0-9][a-z0-9_-]*$/i.test(name)) {
-				log('Ignoring ' + container.Name + ': invalid edge.host, edge.port or Docker name');
-				continue;
+			try {
+				for (const route of containerRoutes(container)) {
+					const host = route.hosts[0];
+					if (seen.has(host))
+						conflicts.add(host);
+					seen.add(host);
+					routes.push(route);
+				}
+			} catch (err) {
+				log('Ignoring ' + container.Name + ': ' + err.message);
 			}
-
-			const tls = labels['edge.tls'] || 'off';
-			if (!['off', 'custom', 'auto'].includes(tls)) {
-				log('Ignoring ' + container.Name + ': invalid edge.tls');
-				continue;
-			}
-			if (seen.has(host))
-				conflicts.add(host);
-			seen.add(host);
-			const id = 'docker-' + Crypto.createHash('sha256').update(host).digest('hex').substring(0, 40);
-			const route = Routes.validate({ id, hosts: [host], target: 'http://' + name + ':' + port, tls });
-			routes.push(Routes.clean(route));
 		}
 	}
 	for (const host of conflicts)

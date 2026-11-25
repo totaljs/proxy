@@ -1,20 +1,18 @@
 services:
-  edge:
-    image: totaljs-proxy:local
-    build: ../..
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./edge.conf:/edge/edge.conf:ro
-      - ./:/edge/routing:ro
-      - edge-data:/edge/data
-    command: ["node", "index.js", "edge.conf"]
-
   app:
-    build: ./app
+    container_name: totaljs-hello
+    image: totalplatform/run:npm
     restart: unless-stopped
+    volumes:
+      - ./app:/www
+      # Optional shared dependencies, as in Code.
+      # - /srv/node_modules:/node_modules:ro
+    environment:
+      PROXY_HOST: http://hello.localhost
+      PROXY_PORT: "80"
+      PROXY_LOGS: "true"
+    networks: [proxy]
 
-volumes:
-  edge-data:
+networks:
+  proxy:
+    external: true

@@ -48,6 +48,40 @@ Test('Docker discovery excludes ambiguous hosts and ignores foreign networks', a
 	Assert.equal(Fs.readFileSync(manual, 'utf8'), '[]\n');
 });
 
+Test('Compose environment discovers multiple origins, a shared certificate and access logs', async function() {
+	const app = container('totaljs-app', 'unused-label.test');
+	app.Config.Env = [
+		'PROXY_HOST=https://shop.test, https://www.shop.test, http://preview.test',
+		'PROXY_PORT=80', 'PROXY_CERT=shared/shop', 'PROXY_LOGS=TRUE'
+	];
+	const auto = container('totaljs-auto', 'unused-label.test');
+	auto.Config.Env = ['PROXY_HOST=https://auto.test,bare.test', 'PROXY_LOGS=false'];
+	const invalid = container('totaljs-invalid', 'unused-label.test');
+	invalid.Config.Env = ['PROXY_HOST=https://invalid.test', 'PROXY_CERT=../outside'];
+	const containers = [app, auto, invalid];
+	const docker = async args => args[0] === 'network' ? [{ Name: 'proxy', Id: 'network', Containers: Object.fromEntries(containers.map(item => [item.Id, {}])) }] : containers;
+	const messages = [];
+	const routes = await snapshot('proxy', docker, message => messages.push(message));
+	const hosts = new Map(routes.map(route => [route.hosts[0], route]));
+	Assert.equal(hosts.size, 5);
+	for (const host of ['shop.test', 'www.shop.test']) {
+		const item = hosts.get(host);
+		Assert.equal(item.tls, 'custom');
+		Assert.equal(item.cert_file, 'shared/shop/fullchain.pem');
+		Assert.equal(item.key_file, 'shared/shop/privkey.pem');
+		Assert.equal(item.accesslog, true);
+		Assert.equal(new URL(item.target).hostname, 'totaljs-app');
+		Assert.equal(new URL(item.target).port, '');
+	}
+	Assert.equal(hosts.get('preview.test').tls, 'off');
+	Assert.equal(hosts.get('preview.test').cert_file, undefined);
+	Assert.equal(hosts.get('auto.test').tls, 'auto');
+	Assert.equal(hosts.get('auto.test').target, 'http://totaljs-auto');
+	Assert.equal(hosts.get('auto.test').accesslog, false);
+	Assert.equal(hosts.get('bare.test').tls, 'off');
+	Assert.match(messages.join('\n'), /relative path inside custom_cert_dir/);
+});
+
 Test('Docker network events update Edge without overriding manual routes', { timeout: 26000 }, async function(t) {
 	const folder = tmpdir();
 	const manual = Path.join(folder, 'routes.json');
@@ -106,10 +140,13 @@ if (args[0] === 'events') {
 	const read = async () => (await request({ socketPath: edge.config.control, path: '/routes' })).json;
 	Assert.deepEqual((await read()).map(route => route.id), ['manual']);
 
-	setState(2, [manualCollision, wildcardCollision, container('shop', 'shop.test')]);
+	const shop = container('shop', 'unused-label.test');
+	shop.Config.Env = ['PROXY_HOST=http://shop.test', 'PROXY_PORT=8000', 'PROXY_LOGS=true'];
+	setState(2, [manualCollision, wildcardCollision, shop]);
 	await until(async () => (await read()).some(route => route.target === 'http://shop:8000'));
 	let active = await read();
 	Assert.equal(active.length, 2);
+	Assert.equal(active.find(route => route.hosts.includes('shop.test')).accesslog, true);
 	Assert.equal(active.find(route => route.id === 'manual').target, 'http://manual:8000');
 	Assert.equal(edge.routes.lookup('app.reserved.test').route.id, 'manual');
 
