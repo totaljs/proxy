@@ -1,0 +1,20 @@
+services:
+  edge:
+    image: totaljs-edge:0.1.1
+    build: ../..
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./edge.conf:/edge/edge.conf:ro
+      - ./:/edge/routing:ro
+      - edge-data:/edge/data
+    command: ["node", "index.js", "edge.conf"]
+
+  app:
+    build: ./app
+    restart: unless-stopped
+
+volumes:
+  edge-data:

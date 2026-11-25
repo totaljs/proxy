@@ -1,0 +1,35 @@
+services:
+  app:
+    build: ../examples/totaljs/app
+    ports:
+      - "127.0.0.1:18081:8000"
+
+  edge:
+    image: ${BENCH_EDGE_IMAGE:?Set BENCH_EDGE_IMAGE}
+    build: ..
+    command: ["node", "index.js", "bench/edge.conf"]
+    ports: &proxy_ports
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:18443:8443"
+    volumes:
+      - ${BENCH_EDGE_CONFIG:-./edge.conf}:/edge/bench/edge.conf:ro
+      - ./routes.json:/edge/bench/routes.json:ro
+      - ${BENCH_TLS_DIR:?Set BENCH_TLS_DIR}:/edge/bench/tls:ro
+      - edge-data:/edge/data
+
+  nginx:
+    image: nginx:1.28.0-alpine
+    ports: *proxy_ports
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${BENCH_TLS_DIR:?Set BENCH_TLS_DIR}:/bench/tls:ro
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    ports: *proxy_ports
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${BENCH_TLS_DIR:?Set BENCH_TLS_DIR}:/bench/tls:ro
+
+volumes:
+  edge-data:

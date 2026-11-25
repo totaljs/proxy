@@ -1,0 +1,8 @@
+[
+  {
+    "id": "flow",
+    "hosts": ["flow.example.com"],
+    "target": "http://flow:8000",
+    "tls": "auto"
+  }
+]

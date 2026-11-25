@@ -1,0 +1,86 @@
+:root {
+  color-scheme: dark;
+  --bg: #101821;
+  --section: #141f29;
+  --card: #192733;
+  --line: #334651;
+  --ink: #f0f9f7;
+  --muted: #b8c9ce;
+  --mint: #77e2c0;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--ink);
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; }
+.shell { width: min(1120px, calc(100% - 3rem)); margin-inline: auto; }
+.topbar, .footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.topbar { min-height: 5.4rem; border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: .65rem; font-size: 1.05rem; font-weight: 600; white-space: nowrap; }
+.brand b { color: var(--mint); }
+nav { display: flex; gap: clamp(.7rem, 4vw, 2rem); font-size: .9375rem; color: var(--muted); }
+nav a:hover, .footer > a:last-child:hover, .example-link:hover { color: var(--mint); text-decoration: underline; text-underline-offset: .25rem; }
+.hero { min-height: 36rem; display: grid; align-items: center; grid-template-columns: minmax(0, 1.2fr) minmax(0, .85fr); gap: clamp(2rem, 7vw, 7rem); padding-block: 5rem; }
+h1, h2, p { margin: 0; }
+h1 { max-width: 11.7ch; font-size: clamp(2.8rem, 6vw, 5.65rem); line-height: .99; letter-spacing: -.075em; }
+h1 em { font-style: normal; color: var(--mint); }
+.hero-copy > p { color: var(--muted); max-width: 42ch; margin-block: 1.7rem 1.8rem; font-size: 1.12rem; }
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; }
+.button { display: inline-flex; min-height: 3rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; padding: .55rem 1rem; font-weight: 680; }
+.primary { background: var(--mint); border-color: var(--mint); color: #082019; }
+.primary:hover { background: #a7f2dc; }
+.secondary:hover { background: var(--card); }
+.command { margin-top: 1.25rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .45rem; border: 1px solid var(--line); border-radius: 7px; max-width: 100%; width: fit-content; padding: .42rem .5rem .42rem .7rem; }
+.command code { color: var(--muted); font: .82rem var(--mono); overflow-wrap: anywhere; }
+.command button { min-height: 2.2rem; color: var(--mint); background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: .3rem .55rem; }
+.topology { overflow: hidden; border: 1px solid #406157; border-radius: 18px; background: radial-gradient(ellipse at 50% 55%, #223a39, #18252f 78%); }
+.topology-head, .topology-foot { display: flex; gap: .65rem; align-items: center; color: var(--muted); font-family: var(--mono); font-size: .875rem; padding: .9rem 1rem; }
+.topology-head { border-bottom: 1px solid #344b4c; }
+.topology-foot { justify-content: space-between; flex-wrap: wrap; border-top: 1px solid #344b4c; }
+.signal { width: .56rem; height: .56rem; border-radius: 50%; background: var(--mint); }
+.protocol { color: var(--mint); margin-left: auto; }
+.network { padding: 1.55rem 1.25rem; }
+.network-item { display: flex; align-items: center; gap: .85rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 8px; background: #17252e; }
+.network-item div { min-width: 0; }
+.network-item small, .network-item strong { display: block; }
+.network-item small { color: var(--muted); font-size: .875rem; }
+.network-item strong { overflow-wrap: anywhere; font: 600 clamp(.88rem, 2vw, 1.06rem) var(--mono); }
+.network-item.engine { border-color: #5baf95; }
+.engine strong { color: var(--mint); }
+.node-icon { width: 46px; height: 46px; display: grid; place-items: center; flex: none; border-radius: 8px; background: #20343e; color: var(--mint); font: 1.3rem var(--mono); }
+.wire { height: 1.25rem; margin-left: 2.2rem; border-left: 1px solid #75b7a5; }
+.walkthrough { background: var(--section); border-block: 1px solid var(--line); scroll-margin-top: 1rem; }
+.walkthrough-inner { padding-block: clamp(3rem, 7vw, 5.75rem); }
+.section-intro h2 { font-size: clamp(2rem, 4vw, 3.35rem); line-height: 1.08; letter-spacing: -.06em; }
+.section-intro p { color: var(--muted); margin-top: .75rem; }
+.demo { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 1rem; margin-block: 1.8rem 1.25rem; }
+.steps { display: grid; gap: .5rem; }
+.step { width: 100%; text-align: left; color: var(--ink); padding: .75rem .9rem; border: 1px solid var(--line); background: var(--bg); border-radius: 7px; }
+.step[aria-pressed="true"], .step:hover { border-color: var(--mint); background: #1c332f; }
+.step strong, .step span { display: block; }
+.step span { color: var(--muted); font-size: .9rem; }
+.terminal { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); min-width: 0; overflow: hidden; }
+.terminal-head { padding: .65rem 1rem; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 1rem; font: .875rem var(--mono); color: var(--muted); }
+.terminal-head span:last-child { color: var(--mint); }
+.terminal pre { font: .9rem/1.55 var(--mono); color: var(--mint); padding: 0 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.terminal p { color: var(--muted); font-size: .9375rem; margin-top: auto; padding: .75rem 1rem; }
+.example-link { color: var(--mint); text-decoration: underline; text-underline-offset: .25rem; }
+.footer { min-height: 5.5rem; }
+.footer > a:last-child { color: var(--muted); font-size: .9375rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 46rem) {
+  .shell { width: calc(100% - 2rem); }
+  .hero, .demo { grid-template-columns: 1fr; }
+  .hero { padding-block: 3rem; }
+  .topology { width: min(100%, 29rem); }
+  .terminal { min-height: 12rem; }
+}
+@media (max-width: 24rem) {
+  .topbar { flex-wrap: wrap; padding-block: .8rem; }
+  nav { width: 100%; }
+}

@@ -1,0 +1,5 @@
+services:
+  edge:
+    command: ["node", "--expose-gc", "bench/memory.js", "bench/edge.conf"]
+    volumes:
+      - ./memory.js:/edge/bench/memory.js:ro

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "benchmark",
+    "hosts": ["bench.test"],
+    "target": "http://app:8000",
+    "tls": "custom",
+    "https": false,
+    "cert_file": "cert.pem",
+    "key_file": "key.pem"
+  }
+]
