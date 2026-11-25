@@ -12,7 +12,7 @@ const { snapshot, publish } = require('../scripts/docker-watch');
 function container(id, host, network = 'network') {
 	return {
 		Id: id, Name: '/' + id, State: { Running: true },
-		Config: { Labels: { 'edge.host': host, 'edge.port': '8000' } },
+		Config: { Labels: { 'proxy.host': host, 'proxy.port': '8000' } },
 		NetworkSettings: { Networks: { proxy: { NetworkID: network } } }
 	};
 }
@@ -48,9 +48,9 @@ Test('Docker discovery excludes ambiguous hosts and ignores foreign networks', a
 	Assert.equal(Fs.readFileSync(manual, 'utf8'), '[]\n');
 
 	const discovered = Path.join(folder, 'routes.docker.json');
-	Fs.writeFileSync(discovered, JSON.stringify({ source: 'edge-docker', routes }));
-	Assert.equal(await publish(discovered, routes), true);
+	await publish(discovered, routes);
 	Assert.equal(JSON.parse(Fs.readFileSync(discovered)).source, 'proxy-docker');
+	Assert.equal(await publish(discovered, routes), false);
 });
 
 Test('Compose environment discovers multiple origins, a shared certificate and access logs', async function() {

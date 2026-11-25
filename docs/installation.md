@@ -13,8 +13,6 @@ Before starting, edit `deploy/routes.json` with your domains and upstream addres
 
 Keep the `proxy-data` volume between upgrades. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image. Proxy checks file-managed routes for changes every five seconds.
 
-When upgrading an older Compose deployment, stop the old proxy and mark `proxy-data` as an external volume in your Compose file and set `PROXY_DATA_VOLUME` to the existing Docker volume name before starting the new service. Existing custom bind mounts must target `/proxy`. Point control clients at the socket indicated by `control` in the new config. Code still calls its connection settings `edge` and `edge_token`.
-
 ## Run a Total.js app from its Compose file
 
 The [Total.js example](../examples/totaljs) uses `totalplatform/run:npm` and declares its domain, internal port and access logging in the app's Compose environment. Set up the shared Proxy and Docker discovery once from the repository root:

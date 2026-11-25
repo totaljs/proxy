@@ -63,7 +63,7 @@ networks:
 | `PROXY_CERT` | Optional directory relative to Proxy's `custom_cert_dir`. Proxy uses `fullchain.pem` and `privkey.pem` from that directory for HTTPS or bare host entries. Multiple apps can reference the same wildcard certificate. Mount these files into Proxy. |
 | `PROXY_LOGS` | Set to `true` to enable or `false` to disable per-route access logs. Proxy needs a configured access log destination. |
 
-Existing containers can still use the `edge.host`, `edge.port` and `edge.tls` labels. A container with `PROXY_HOST` uses its environment configuration. Hand-written routes keep priority in both cases.
+The watchdog also accepts the `proxy.host`, `proxy.port` and `proxy.tls` labels. When `PROXY_HOST` is set, it takes precedence over labels. Hand-written routes keep priority over discovered routes.
 
 ## Add one route by hand
 
