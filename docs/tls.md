@@ -35,13 +35,13 @@ When a certificate is ready, HTTP redirects to HTTPS by default. The separate `h
 
 ## Configure certificates in Compose
 
-Keep `"tls": "custom"` on each route. If you prefer to configure its files in Compose, omit `cert_file` and `key_file` from that route in `routes.json`. Set `EDGE_CUSTOM_CERTS` on the **Proxy service**, keyed by route ID:
+Keep `"tls": "custom"` on each route. If you prefer to configure its files in Compose, omit `cert_file` and `key_file` from that route in `routes.json`. Set `PROXY_CUSTOM_CERTS` on the **Proxy service**, keyed by route ID:
 
 ```yaml
 services:
-  edge:
+  proxy:
     environment:
-      EDGE_CUSTOM_CERTS: >-
+      PROXY_CUSTOM_CERTS: >-
         {
           "portal": {
             "cert_file": "portal/fullchain.pem",
@@ -58,12 +58,12 @@ services:
         }
     volumes:
       # Add this to the existing config and data mounts.
-      - ./tls:/edge/data/tls:ro
+      - ./tls:/proxy/data/tls:ro
 ```
 
 Set `shop` to `tls: custom` and add a `docs` route for `docs.example.com` with the same mode to try this configuration. Here `portal` uses its own certificate, and `shop` and `docs` reuse the pair in `./tls/shared/`. A certificate for `*.example.com` covers both `shop.example.com` and `docs.example.com`. Include the root domain separately in the certificate if a route also serves `example.com`. A wildcard covers one label and does not cover `dev.shop.example.com`.
 
-If a route has explicit paths in both places, the pair in `routes.json` takes precedence. With neither pair configured, Proxy keeps its existing certificate discovery from `data/custom/`, where the `.pem` or `.crt` and `.key` share a basename. To use another directory for explicit paths, set `custom_cert_dir` in `edge.conf` and mount the files there. The files must be readable by the Proxy user, and symlinks must resolve within that directory. Restart Proxy after replacing the certificate or private key files. Recreate the container after changing its Compose environment.
+If a route has explicit paths in both places, the pair in `routes.json` takes precedence. With neither pair configured, Proxy keeps its existing certificate discovery from `data/custom/`, where the `.pem` or `.crt` and `.key` share a basename. To use another directory for explicit paths, set `custom_cert_dir` in `proxy.conf` and mount the files there. The files must be readable by the Proxy user, and symlinks must resolve within that directory. Restart Proxy after replacing the certificate or private key files. Recreate the container after changing its Compose environment.
 
 An invalid explicit pair affects only the routes that use it. Proxy reports the problem and keeps those routes on the configured TLS mode. Scoped control clients can use the operator's configured certificates, while file selection belongs to the Proxy administrator.
 

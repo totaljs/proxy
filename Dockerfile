@@ -6,16 +6,16 @@ LABEL org.opencontainers.image.title="Total.js Proxy" \
 # Low ports without root
 RUN apk add --no-cache libcap && setcap 'cap_net_bind_service=+ep' /usr/local/bin/node && apk del libcap
 
-WORKDIR /edge
+WORKDIR /proxy
 COPY package.json index.js config ./
 COPY lib ./lib
-RUN mkdir -p /edge/data /edge/control && chown node:node /edge/data /edge/control && chmod 700 /edge/data
+RUN mkdir -p /proxy/data /proxy/control && chown node:node /proxy/data /proxy/control && chmod 700 /proxy/data
 
 USER node
-VOLUME /edge/data /edge/control
+VOLUME /proxy/data /proxy/control
 EXPOSE 80 443 53/udp 53/tcp
 
-# More threads for the files and the crypto of the edge (names are resolved apart, see lib/proxy.js)
+# More threads for the files and the crypto of Proxy (names are resolved apart, see lib/proxy.js)
 ENV UV_THREADPOOL_SIZE=16
 
 CMD ["node", "index.js", "config"]

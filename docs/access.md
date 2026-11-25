@@ -38,10 +38,10 @@ For Compose, mount the directory containing `routes.json` and set `routes_file` 
 From an Proxy source checkout, run this in Bash. The password is entered without echo and passed to Node through stdin.
 
 ```bash
-IFS= read -rs -p 'App password: ' EDGE_PASSWORD
+IFS= read -rs -p 'App password: ' PROXY_PASSWORD
 printf '\n'
-printf '%s' "$EDGE_PASSWORD" | node -e 'const fs = require("node:fs"); console.log(require("./lib/guard").hash(fs.readFileSync(0, "utf8")))'
-unset EDGE_PASSWORD
+printf '%s' "$PROXY_PASSWORD" | node -e 'const fs = require("node:fs"); console.log(require("./lib/guard").hash(fs.readFileSync(0, "utf8")))'
+unset PROXY_PASSWORD
 ```
 
 Paste the resulting hash into the route in place of `REPLACE_WITH_GENERATED_HASH`. Add one entry per user. Omit `auth` to use only the IP rules. Serve routes with passwords over HTTPS. Proxy verifies the password and removes the Basic credentials before forwarding to the app.

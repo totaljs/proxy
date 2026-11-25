@@ -1,27 +1,32 @@
 services:
-  edge:
+  proxy:
     image: ${PROXY_IMAGE:-totaljs-proxy:local}
     restart: unless-stopped
     environment:
+      - PROXY_EVENTLOG
       - EDGE_EVENTLOG
+      - PROXY_ACCESSLOG
       - EDGE_ACCESSLOG
+      - PROXY_ACCESSLOG_DEFAULT
       - EDGE_ACCESSLOG_DEFAULT
+      - PROXY_CUSTOM_CERTS
       - EDGE_CUSTOM_CERTS
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./edge.conf:/edge/edge.conf:ro
-      - ./:/edge/routing:ro
-      - edge-data:/edge/data
-    command: ["node", "index.js", "edge.conf"]
+      - ./proxy.conf:/proxy/proxy.conf:ro
+      - ./:/proxy/routing:ro
+      - proxy-data:/proxy/data
+    command: ["node", "index.js", "proxy.conf"]
     networks:
       - proxy
 
 networks:
   proxy:
-    name: ${EDGE_NETWORK:-proxy}
+    name: ${PROXY_NETWORK:-${EDGE_NETWORK:-proxy}}
     external: true
 
 volumes:
-  edge-data:
+  proxy-data:
+    name: ${PROXY_DATA_VOLUME:-${COMPOSE_PROJECT_NAME}_proxy-data}

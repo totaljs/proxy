@@ -9,9 +9,11 @@ docker build -t totaljs-proxy:local .
 docker compose -f deploy/compose.yaml up -d
 ```
 
-Before starting, edit `deploy/routes.json` with your domains and upstream addresses. The example uses `http://app:8000` on the existing `proxy` Docker network. Connect your app to that network, or set `EDGE_NETWORK` to the network you already use. Point public DNS at the server and allow inbound TCP ports 80 and 443 for automatic HTTPS.
+Before starting, edit `deploy/routes.json` with your domains and upstream addresses. The example uses `http://app:8000` on the existing `proxy` Docker network. Connect your app to that network, or set `PROXY_NETWORK` to the network you already use. Point public DNS at the server and allow inbound TCP ports 80 and 443 for automatic HTTPS.
 
-Keep the `edge-data` volume between upgrades. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image. Proxy checks file-managed routes for changes every five seconds.
+Keep the `proxy-data` volume between upgrades. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image. Proxy checks file-managed routes for changes every five seconds.
+
+When upgrading an older Compose deployment, stop the old proxy and mark `proxy-data` as an external volume in your Compose file and set `PROXY_DATA_VOLUME` to the existing Docker volume name before starting the new service. Existing custom bind mounts must target `/proxy`. Point control clients at the socket indicated by `control` in the new config. Code still calls its connection settings `edge` and `edge_token`.
 
 ## Run a Total.js app from its Compose file
 
@@ -40,7 +42,7 @@ Set `routes_file` to manage routes with a JSON file such as the example. Mount i
 
 ```yaml
 services:
-  edge:
+  proxy:
     image: totaljs-proxy:local
     restart: always
     ports:
@@ -50,8 +52,8 @@ services:
       # - 53:53/udp
       # - 53:53/tcp
     volumes:
-      - edge-data:/edge/data
-      - edge-control:/edge/control
+      - proxy-data:/proxy/data
+      - proxy-control:/proxy/control
 
 networks:
   default:
@@ -59,12 +61,12 @@ networks:
     external: true
 
 volumes:
-  edge-data:
-  edge-control:
+  proxy-data:
+  proxy-control:
 ```
 
-The edge and the project containers share the `proxy` network, so a route can point to a container by its name.
+Proxy and the project containers share the `proxy` network, so a route can point to a container by its name.
 
-The image runs as the `node` user and can bind the low ports. For Code, mount the same `edge-control` volume at `/edge/control` in both services and configure Code to use `/edge/control/edge.sock`. The socket is owner-only, so the client needs the owning UID or root access. Keep `edge-data` mounted only in Proxy. For a bind mount instead of a named volume, make the host directory writable by the container’s `node` user.
+The image runs as the `node` user and can bind the low ports. For Code, mount the same `proxy-control` volume at `/proxy/control` in both services and configure Code to use `/proxy/control/proxy.sock`. The socket is owner-only, so the client needs the owning UID or root access. Keep `proxy-data` mounted only in Proxy. For a bind mount instead of a named volume, make the host directory writable by the container’s `node` user.
 
 See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.

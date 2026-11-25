@@ -9,7 +9,7 @@ This example runs two copies of Flow on one Proxy. The operations copy keeps a h
 
 ## Configure Proxy
 
-Use a Proxy build that supports `docker_routes_file`. To build from the source checkout, run `docker build -t edge-discovery .` and set the Proxy service image to `edge-discovery`.
+Use a Proxy build that supports `docker_routes_file`. To build from the source checkout, run `docker build -t proxy-discovery .` and set the Proxy service image to `proxy-discovery`.
 
 In the Proxy config, add these two settings:
 
@@ -22,13 +22,13 @@ Keep the manual file under `./routing` and create a separate directory for the g
 
 ```yaml
 services:
-  edge:
+  proxy:
     volumes:
-      - ./routing:/edge/routing:ro
-      - ./discovered:/edge/discovered:ro
+      - ./routing:/proxy/routing:ro
+      - ./discovered:/proxy/discovered:ro
 ```
 
-This example assumes the config is at `/edge/edge.conf` and Proxy is already attached to `proxy`. Keep your existing config and data mounts. Mount the directories so that atomic file replacement is visible inside the container. The generated file can be missing at startup. This setup uses file-managed routing. The control API still lists routes and certificate status.
+This example assumes the config is at `/proxy/proxy.conf` and Proxy is already attached to `proxy`. Keep your existing config and data mounts. Mount the directories so that atomic file replacement is visible inside the container. The generated file can be missing at startup. This setup uses file-managed routing. The control API still lists routes and certificate status.
 
 ## Declare domains in the app Compose file
 
@@ -58,7 +58,7 @@ networks:
 
 | Variable | What it configures |
 | --- | --- |
-| `PROXY_HOST` | Comma-separated hostnames or HTTP(S) origins without paths or ports. `https://` selects automatic certificates, and `http://` selects HTTP. A bare hostname uses HTTP unless a custom certificate is configured. |
+| `PROXY_HOST` | Comma-separated hostnames or HTTP(S) origins without paths or ports. `https://` selects automatic certificates, and `http://` selects HTTP. A bare hostname uses HTTP unless a custom certificate is configured. Set an empty value to disable discovery for a temporary container. |
 | `PROXY_PORT` | The actual HTTP port inside the app container, defaulting to 80. The app must listen on this port. Use 8000 for apps that listen there. |
 | `PROXY_CERT` | Optional directory relative to Proxy's `custom_cert_dir`. Proxy uses `fullchain.pem` and `privkey.pem` from that directory for HTTPS or bare host entries. Multiple apps can reference the same wildcard certificate. Mount these files into Proxy. |
 | `PROXY_LOGS` | Set to `true` to enable or `false` to disable per-route access logs. Proxy needs a configured access log destination. |
@@ -91,9 +91,9 @@ services:
     volumes:
       - demo-data:/www/.src/databases
     labels:
-      edge.host: demo.example.com
-      edge.port: "8000"
-      edge.tls: auto
+      proxy.host: demo.example.com
+      proxy.port: "8000"
+      proxy.tls: auto
     networks: [proxy]
 
 volumes:
@@ -104,12 +104,12 @@ networks:
     external: true
 ```
 
-Use a distinct, single-label container name for each app. The watchdog uses that name to reach the upstream on Docker DNS. The `edge.tls` label defaults to `off` and also accepts `custom` and `auto`. Follow the [Flow setup guide](flow.md) to configure Flow privately before pointing the public DNS records at Proxy.
+Use a distinct, single-label container name for each app. The watchdog uses that name to reach the upstream on Docker DNS. The `proxy.tls` label defaults to `off` and also accepts `custom` and `auto`. Follow the [Flow setup guide](flow.md) to configure Flow privately before pointing the public DNS records at Proxy.
 
 From the Proxy source checkout on the Docker host, run the watchdog. Replace the example path with the host directory mounted above.
 
 ```sh
-node scripts/docker-watch.js proxy /srv/edge/discovered/routes.docker.json
+node scripts/docker-watch.js proxy /srv/proxy/discovered/routes.docker.json
 ```
 
 The host account running this command needs Docker access and write access to the generated file's directory. Proxy reads that directory through its read-only mount. Use `--once` at the end of the command to generate a single snapshot.

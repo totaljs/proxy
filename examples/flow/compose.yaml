@@ -1,24 +1,23 @@
 services:
   flow:
+    container_name: totaljs-flow
     image: totalplatform/flow:11
     restart: unless-stopped
     volumes:
       - flow-databases:/www/.src/databases
       - flow-streams:/www/.src/flowstream
+    environment:
+      PROXY_HOST: https://flow.example.com
+      PROXY_PORT: "8000"
+      PROXY_LOGS: "true"
+      # Optional certificate directory relative to Proxy's custom_cert_dir.
+      # PROXY_CERT: shared/example
+    networks: [proxy]
 
-  edge:
-    image: ${PROXY_IMAGE:-totaljs-proxy:local}
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./edge.conf:/edge/edge.conf:ro
-      - ./:/edge/routing:ro
-      - edge-data:/edge/data
-    command: ["node", "index.js", "edge.conf"]
+networks:
+  proxy:
+    external: true
 
 volumes:
   flow-databases:
   flow-streams:
-  edge-data:

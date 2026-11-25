@@ -11,13 +11,13 @@ The `config` file, in the same `key : value` format as Total.js:
 | `acme_ca` | | Optional PEM CA file for a private ACME server, relative to the config. |
 | `http`, `https` | `80`, `443` | Ports |
 | `dns` | `0` | Port of the DNS server for wildcards: `53` to turn it on |
-| `dns_zone` | | The zone delegated to the edge, for example `acme.code.example.com` |
+| `dns_zone` | | The zone delegated to Proxy, for example `acme.code.example.com` |
 | `dns_ns` | | The name of this server in the NS record, for example `ns.code.example.com` |
 | `data` | `data` | Routes, certificates and the account |
 | `custom_cert_dir` | `data/tls` | Directory for explicitly configured certificate and key paths. See [per-app TLS](tls.md). |
 | `routes_file` | | Read-only JSON array of routes, relative to the config file. Proxy checks for changes every five seconds. An invalid update leaves the last valid routes active. |
 | `docker_routes_file` | | Optional watchdog snapshot, relative to the config. Requires `routes_file`, whose routes take precedence. See [Docker discovery](docker-discovery.md). |
-| `control` | `control/edge.sock` | The control API: a Unix socket (in a folder that Code shares with the edge, apart from its keys), or `host:port` with a `token` |
+| `control` | `control/proxy.sock` | The control API: a Unix socket (in a folder that Code shares with Proxy, apart from its keys), or `host:port` with a `token` |
 | `token` | | Administrator token. Network control requires this token or scoped clients. |
 | `control_clients_file` | | JSON file of scoped tokens and allowed domains, relative to the config. See [Shared apps](shared-apps.md). |
 | `renew_days` | `30` | Days before expiry to renew |
@@ -31,7 +31,7 @@ The `config` file, in the same `key : value` format as Total.js:
 | `maxupload` | `50` | Largest request body in MB, for routes without their own |
 | `compress` | `true` | Brotli or gzip for text the app sends uncompressed (HTML, CSS, JavaScript, JSON, SVG, XML), from 1 KB |
 | `errors` | `data/errors` | Own pages: `401.html`, `403.html`, `404.html`, `413.html`, `429.html`, `502.html`, `503.html`, `504.html` (read at start). `503.html` (or `502.html`) is the page of every site whose container does not answer, under the one of the site and of the settings |
-| `eventlog` | `stdout` | Operational messages. Use `stdout`, `off`, or a directory for daily `edge-YYYY-MM-DD.log` files. File logs keep up to 50 MB per day and 14 days. |
+| `eventlog` | `stdout` | Operational messages. Use `stdout`, `off`, or a directory for daily `proxy-YYYY-MM-DD.log` files. File logs keep up to 50 MB per day and 14 days. |
 | `accesslog` | | Off when empty; `stdout`; or a directory with one file per route and day (`access-<route-id>-YYYY-MM-DD.log`) |
 | `accesslog_default` | `true` | Whether routes inherit logging when a destination is configured. Set to `false` to log only routes with `"accesslog": true`. |
 | `accesslog_days` | `14` | Days the files of the access log are kept |
@@ -40,15 +40,15 @@ The `config` file, in the same `key : value` format as Total.js:
 
 ACME renewals store the private key and certificate chain in one owner-only file. Existing ACME certificate pairs still load. Back up the entire data volume together.
 
-Running the edge means accepting the terms of the ACME server in `acme`.
+Running Proxy means accepting the terms of the ACME server in `acme`.
 
 See the [logging guide](logging.md) for deployment examples and per-route options.
 
 ## Wildcard certificates
 
-Let's Encrypt gives wildcards only through a DNS check. The edge answers that check itself, so there is no need for your DNS provider's API.
+Let's Encrypt gives wildcards only through a DNS check. Proxy answers that check itself, so there is no need for your DNS provider's API.
 
-First, once for the whole server, delegate a small zone to the edge in your DNS:
+First, once for the whole server, delegate a small zone to Proxy in your DNS:
 
 ```text
 acme.code.example.com.   NS   ns.code.example.com.
@@ -63,7 +63,7 @@ Then, once for each wildcard, create the CNAME record that `GET /dns/{host}` ret
 _acme-challenge.clientes.example.com.   CNAME   3f9a2c41d07be81e5a6c.acme.code.example.com.
 ```
 
-The edge renews the certificate from then on with nothing more to do.
+Proxy renews the certificate from then on with nothing more to do.
 
 ## Visits
 

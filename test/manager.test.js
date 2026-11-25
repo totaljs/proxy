@@ -146,7 +146,7 @@ Test('operational events can be written to their own daily file', async function
 	events.write('Certificates: sample.test needs a custom certificate');
 	await events.close();
 	const [file] = Fs.readdirSync(folder);
-	Assert.match(file, /^edge-\d{4}-\d{2}-\d{2}\.log$/);
+	Assert.match(file, /^proxy-\d{4}-\d{2}-\d{2}\.log$/);
 	Assert.match(Fs.readFileSync(Path.join(folder, file), 'utf8'), /sample\.test needs a custom certificate/);
 });
 
@@ -170,8 +170,8 @@ Test('explicit TLS paths share a wildcard without changing other routes', async 
 	const files = { cert_file: 'shared/wildcard.crt', key_file: 'shared/private-key.pem' };
 	const target = 'http://127.0.0.1:' + backend.port;
 	const route = (id, host, paths) => ({ id, hosts: [host], tls: 'custom', target, ...paths });
-	const previous = process.env.EDGE_CUSTOM_CERTS;
-	process.env.EDGE_CUSTOM_CERTS = JSON.stringify({ beta: files, alpha: { ...files, key_file: 'unset.key' } });
+	const previous = process.env.PROXY_CUSTOM_CERTS;
+	process.env.PROXY_CUSTOM_CERTS = JSON.stringify({ beta: files, alpha: { ...files, key_file: 'unset.key' } });
 	try {
 		edge = await start({ data, custom_cert_dir: root }, [
 			route('alpha', 'alpha.apps.test', files),
@@ -184,9 +184,9 @@ Test('explicit TLS paths share a wildcard without changing other routes', async 
 		]);
 	} finally {
 		if (previous === undefined)
-			delete process.env.EDGE_CUSTOM_CERTS;
+			delete process.env.PROXY_CUSTOM_CERTS;
 		else
-			process.env.EDGE_CUSTOM_CERTS = previous;
+			process.env.PROXY_CUSTOM_CERTS = previous;
 	}
 	edge.manager.stop();
 	await edge.manager.sync();

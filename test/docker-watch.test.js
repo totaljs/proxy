@@ -46,6 +46,11 @@ Test('Docker discovery excludes ambiguous hosts and ignores foreign networks', a
 	Fs.writeFileSync(manual, '[]\n');
 	await Assert.rejects(publish(manual, routes), /Refusing to replace/);
 	Assert.equal(Fs.readFileSync(manual, 'utf8'), '[]\n');
+
+	const discovered = Path.join(folder, 'routes.docker.json');
+	Fs.writeFileSync(discovered, JSON.stringify({ source: 'edge-docker', routes }));
+	Assert.equal(await publish(discovered, routes), true);
+	Assert.equal(JSON.parse(Fs.readFileSync(discovered)).source, 'proxy-docker');
 });
 
 Test('Compose environment discovers multiple origins, a shared certificate and access logs', async function() {
@@ -58,7 +63,9 @@ Test('Compose environment discovers multiple origins, a shared certificate and a
 	auto.Config.Env = ['PROXY_HOST=https://auto.test,bare.test', 'PROXY_LOGS=false'];
 	const invalid = container('totaljs-invalid', 'unused-label.test');
 	invalid.Config.Env = ['PROXY_HOST=https://invalid.test', 'PROXY_CERT=../outside'];
-	const containers = [app, auto, invalid];
+	const temporary = container('flow-setup', 'unused-label.test');
+	temporary.Config.Env = ['PROXY_HOST='];
+	const containers = [app, auto, invalid, temporary];
 	const docker = async args => args[0] === 'network' ? [{ Name: 'proxy', Id: 'network', Containers: Object.fromEntries(containers.map(item => [item.Id, {}])) }] : containers;
 	const messages = [];
 	const routes = await snapshot('proxy', docker, message => messages.push(message));

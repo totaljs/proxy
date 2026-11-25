@@ -7,7 +7,7 @@ Share one Proxy between apps or deployment tools that manage their own routes. G
 Use an Proxy build that includes scoped control clients. Leave `routes_file` empty so clients can write routes through the API. In the Proxy config, set:
 
 ```text
-control              : /edge/control/edge.sock
+control              : /proxy/control/proxy.sock
 control_clients_file : clients.json
 ```
 
@@ -61,19 +61,19 @@ networks:
 | Alpha | `flow.apps.alpha.example.com` | `http://flow-alpha:8000` | `flow` |
 | Beta | `flow.apps.beta.example.com` | `http://flow-beta:8000` | `flow` |
 
-Point both public DNS records to Proxy. Start the services with `docker compose up -d`, then publish each route from a shell that can reach Proxy's control socket. Use each deployment's token from `clients.json`. These [control API](control-api.md) requests assume the tokens are available in `EDGE_TOKEN_ALPHA` and `EDGE_TOKEN_BETA`.
+Point both public DNS records to Proxy. Start the services with `docker compose up -d`, then publish each route from a shell that can reach Proxy's control socket. Use each deployment's token from `clients.json`. These [control API](control-api.md) requests assume the tokens are available in `PROXY_TOKEN_ALPHA` and `PROXY_TOKEN_BETA`.
 
 ```bash
-curl --fail-with-body --unix-socket /edge/control/edge.sock \
-  -H "Authorization: Bearer ${EDGE_TOKEN_ALPHA}" \
+curl --fail-with-body --unix-socket /proxy/control/proxy.sock \
+  -H "Authorization: Bearer ${PROXY_TOKEN_ALPHA}" \
   -H 'Content-Type: application/json' \
-  -X PUT http://edge/routes/flow \
+  -X PUT http://proxy/routes/flow \
   -d '{"hosts":["flow.apps.alpha.example.com"],"target":"http://flow-alpha:8000","tls":"auto"}'
 
-curl --fail-with-body --unix-socket /edge/control/edge.sock \
-  -H "Authorization: Bearer ${EDGE_TOKEN_BETA}" \
+curl --fail-with-body --unix-socket /proxy/control/proxy.sock \
+  -H "Authorization: Bearer ${PROXY_TOKEN_BETA}" \
   -H 'Content-Type: application/json' \
-  -X PUT http://edge/routes/flow \
+  -X PUT http://proxy/routes/flow \
   -d '{"hosts":["flow.apps.beta.example.com"],"target":"http://flow-beta:8000","tls":"auto"}'
 ```
 
@@ -88,13 +88,13 @@ Use a Code version that supports bearer tokens over the Unix socket and scoped r
 Mount the control socket directory into each Code container. Give each instance only its own token and make its upstream address unique and reachable from Proxy. For example, for Alpha:
 
 ```text
-edge           : /edge/control/edge.sock
+edge           : /proxy/control/proxy.sock
 edge_token     : <alpha-token>
 host           : code.alpha.example.com
 self_target    : http://code-alpha:8000
 uid            : alpha
 code_container : code-alpha
-edge_container : edge
+edge_container : proxy
 ```
 
 For Beta use its token, `code.beta.example.com`, `http://code-beta:8000`, `uid : beta` and `code_container : code-beta`. The distinct `uid` values keep generated app container and network names separate. Use distinct names for manually named Docker containers as well. Both instances should name the same running Proxy in `edge_container`.

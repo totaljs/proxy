@@ -99,7 +99,7 @@ Test('config file', function() {
 	Assert.equal(config.precheck, false);
 	Assert.equal(config.dns_zone, 'acme.example.com');
 	Assert.equal(config.data, Path.join(folder, 'store'));
-	Assert.equal(config.control, Path.join(folder, 'control/edge.sock'));
+	Assert.equal(config.control, Path.join(folder, 'control/proxy.sock'));
 
 	Fs.writeFileSync(file, 'emial : a@b.es\n');
 	Assert.throws(() => Config.load(file), /Unknown key/);

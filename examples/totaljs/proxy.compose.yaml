@@ -1,5 +1,5 @@
 services:
-  edge:
+  proxy:
     image: totaljs-proxy:local
     build: ../..
     restart: unless-stopped
@@ -7,10 +7,10 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./edge.conf:/edge/edge.conf:ro
-      - ./:/edge/routing:ro
-      - edge-data:/edge/data
-    command: ["node", "index.js", "edge.conf"]
+      - ./proxy.conf:/proxy/proxy.conf:ro
+      - ./:/proxy/routing:ro
+      - proxy-data:/proxy/data
+    command: ["node", "index.js", "proxy.conf"]
     networks: [proxy]
 
 networks:
@@ -18,4 +18,4 @@ networks:
     external: true
 
 volumes:
-  edge-data:
+  proxy-data:

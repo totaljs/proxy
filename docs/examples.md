@@ -4,7 +4,7 @@ This deployment puts three apps behind one Proxy. The shop requests a Let's Encr
 
 ## Proxy config
 
-Save as `edge.conf`. Blank optional values leave their features disabled. Relative paths are resolved from the config location.
+Save as `proxy.conf`. Blank optional values leave their features disabled. Relative paths are resolved from the config location.
 
 ```text
 // ACME account, directory and optional CA for a private ACME server
@@ -26,7 +26,7 @@ data                 : data
 custom_cert_dir      :
 routes_file          : routing/routes.json
 docker_routes_file   :
-control              : control/edge.sock
+control              : control/proxy.sock
 token                :
 control_clients_file :
 
@@ -116,23 +116,23 @@ Build the image with `docker build -t totaljs-proxy:local .` from the repository
 
 ```yaml
 services:
-  edge:
+  proxy:
     # Use an Proxy build that supports the configuration above.
     image: ${PROXY_IMAGE:-totaljs-proxy:local}
     restart: unless-stopped
-    command: ["node", "index.js", "edge.conf"]
+    command: ["node", "index.js", "proxy.conf"]
     ports:
       # Only Proxy publishes the public HTTP and HTTPS ports.
       - "80:80"
       - "443:443"
       # For DNS challenges, publish "53:53/tcp" and "53:53/udp".
     volumes:
-      - ./edge.conf:/edge/edge.conf:ro
+      - ./proxy.conf:/proxy/proxy.conf:ro
       # Mount the directory so atomic replacement of routes.json is visible.
-      - ./:/edge/routing:ro
-      - edge-data:/edge/data
+      - ./:/proxy/routing:ro
+      - proxy-data:/proxy/data
       # Explicit certificate files for the portal.
-      - ./tls:/edge/data/tls:ro
+      - ./tls:/proxy/data/tls:ro
     networks: [proxy]
 
   # Each service uses the same demo and has its own address inside Docker.
@@ -151,7 +151,7 @@ networks:
 
 volumes:
   # Keeps certificates, logs and statistics across container replacements.
-  edge-data:
+  proxy-data:
 ```
 
-Point the public hostnames to Proxy, install the portal certificate and run `docker compose up -d`. For a complete Compose project that also launches its backend, see [Deploy Total.js Flow](flow.md). Verify the shop with `curl -I https://shop.example.com/` and check certificate progress in `docker compose logs edge`.
+Point the public hostnames to Proxy, install the portal certificate and run `docker compose up -d`. For a complete Compose project that also launches its backend, see [Deploy Total.js Flow](flow.md). Verify the shop with `curl -I https://shop.example.com/` and check certificate progress in `docker compose logs proxy`.

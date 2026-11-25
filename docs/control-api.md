@@ -1,6 +1,6 @@
 # Total.js Proxy control API
 
-JSON over HTTP, on the Unix socket in `control/edge.sock` (only its owner can open it):
+JSON over HTTP, on the Unix socket in `control/proxy.sock` (only its owner can open it):
 
 | | |
 |---|---|
@@ -17,7 +17,7 @@ JSON over HTTP, on the Unix socket in `control/edge.sock` (only its owner can op
 | `PUT /settings` | Replaces them (see below) |
 
 ```bash
-curl --unix-socket control/edge.sock -X PUT http://edge/routes/eshop \
+curl --unix-socket control/proxy.sock -X PUT http://proxy/routes/eshop \
   -d '{ "hosts": ["eshop.example.com", "*.clientes.example.com"], "redirects": ["www.eshop.example.com"], "target": "http://eshop:8000", "maxupload": 50, "tls": "auto" }'
 ```
 
@@ -26,9 +26,9 @@ With [scoped clients](shared-apps.md), send the instance token as `Authorization
 After publishing the example route, list it, check its certificate status and remove it with the same socket:
 
 ```bash
-curl --unix-socket control/edge.sock http://edge/routes/eshop
-curl --unix-socket control/edge.sock http://edge/status
-curl --unix-socket control/edge.sock -X DELETE http://edge/routes/eshop
+curl --unix-socket control/proxy.sock http://proxy/routes/eshop
+curl --unix-socket control/proxy.sock http://proxy/status
+curl --unix-socket control/proxy.sock -X DELETE http://proxy/routes/eshop
 ```
 
 A route:
@@ -57,9 +57,9 @@ A route:
 | `auth` | | HTTP Basic users with scrypt hashes. See [Restrict access to an app](access.md) to generate a hash and combine IP and password checks. |
 | `compress` | the config | `true` or `false` for this site |
 
-The addresses are the ones the edge sees, never a header of the request. The concurrent HTTP and WebSocket limits also apply to routes that opt out of the per-IP request rate. A right password is remembered for 10 minutes, so scrypt runs once per person and not on every request.
+The addresses are the ones Proxy sees, never a header of the request. The concurrent HTTP and WebSocket limits also apply to routes that opt out of the per-IP request rate. A right password is remembered for 10 minutes, so scrypt runs once per person and not on every request.
 
-A container that does not answer (stopped, starting, not there) gets the page of its site with **503** and `Retry-After: 60`, so search engines come back later: the `page` of the route, else the one of the settings, else `503.html` (or `502.html`) of the errors folder, else a plain page of the edge in Spanish or English, as the visitor reads.
+A container that does not answer (stopped, starting, not there) gets the page of its site with **503** and `Retry-After: 60`, so search engines come back later: the `page` of the route, else the one of the settings, else `503.html` (or `502.html`) of the errors folder, else a plain page of Proxy in Spanish or English, as the visitor reads.
 
 The settings of every site, kept in `data/settings.json` (Code sends them from Settings → Security):
 

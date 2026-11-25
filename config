@@ -1,6 +1,6 @@
 // Total.js Proxy
 
-// Contact for the Let's Encrypt account (optional). Running the edge means accepting
+// Contact for the Let's Encrypt account (optional). Running Proxy means accepting
 // the terms of the ACME server below.
 email          :
 
@@ -26,11 +26,11 @@ routes_file    :
 // Optional snapshot from the Docker watchdog. Requires a separate routes_file.
 docker_routes_file :
 
-// Control API for Code: a Unix socket (in a folder of its own, the only one Code shares with the edge), or host:port
+// Control API for Code: a Unix socket (in a folder of its own, the only one Code shares with Proxy), or host:port
 // together with a token
-control        : control/edge.sock
+control        : control/proxy.sock
 token          :
-// Optional JSON file of scoped tokens and hostname allowlists for shared Edge.
+// Optional JSON file of scoped tokens and hostname allowlists for shared Proxy.
 control_clients_file :
 
 // Days before expiry to renew a certificate
@@ -56,9 +56,9 @@ hsts           : max-age=31536000
 maxupload      : 50
 // Brotli or gzip for the text that the apps send uncompressed
 compress       : true
-// Own pages for the answers of the edge: 401.html, 403.html, 404.html, 413.html, 502.html, 504.html
+// Own pages for the answers of Proxy: 401.html, 403.html, 404.html, 413.html, 502.html, 504.html
 errors         : data/errors
-// Operational events: stdout (default), off, or a directory with a daily edge-YYYY-MM-DD.log file.
+// Operational events: stdout (default), off, or a directory with a daily proxy-YYYY-MM-DD.log file.
 eventlog       : stdout
 // Access log: empty (off), stdout, or a folder with one file a day kept accesslog_days days, up to accesslog_maxsize MB
 // a day
