@@ -9,34 +9,36 @@ docker build -t totaljs-proxy:local .
 docker compose -f deploy/compose.yaml up -d
 ```
 
-Before starting, edit `deploy/routes.json` with your domains and upstream addresses. The example uses `http://app:8000` on the existing `proxy` Docker network. Connect your app to that network, or set `PROXY_NETWORK` to the network you already use. Point public DNS at the server and allow inbound TCP ports 80 and 443 for automatic HTTPS.
+Before starting, rename `deploy/data/sites/app.example.com.json` after your domain and edit its `hosts` and `target`. The example sends `app.example.com` to `app:8000` on the existing `proxy` Docker network. Connect your app to that network, or set `PROXY_NETWORK` to the network you already use. Point public DNS at the server and allow inbound TCP ports 80 and 443 for automatic HTTPS.
 
-Keep the `proxy-data` volume between upgrades. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image. Proxy checks file-managed routes for changes every five seconds.
+The deployment mounts two folders next to the Compose file. Make both writable by the container user (UID 1000):
+
+| Folder | What it holds |
+|---|---|
+| `deploy/data` | `config.json`, `sites/*.json`, and the certificates and account that Proxy keeps. Back it up and keep it between upgrades. |
+| `deploy/logs` | One log per site and `error.log`, see [Logging](logging.md). |
+
+Proxy applies a change of `config.json` or of a site file by itself within a few seconds. A file with a mistake is not applied and `logs/error.log` says why. The deployment uses the local build by default. Set `PROXY_IMAGE` to use a different image.
 
 ## Run a Total.js app from its Compose file
 
-The [Total.js example](../examples/totaljs) uses `totalplatform/run:npm` and declares its domain, internal port and access logging in the app's Compose environment. Set up the shared Proxy and Docker discovery once from the repository root:
+The [Total.js example](../examples/totaljs) uses `totalplatform/run:npm` and declares its domain, internal port and logging in the app's Compose environment. Start the shared Proxy once from the repository root:
 
 ```sh
 docker network inspect proxy >/dev/null 2>&1 || docker network create proxy
 docker compose -p proxy-demo -f examples/totaljs/proxy.compose.yaml up --build -d
-node scripts/docker-watch.js proxy examples/totaljs/routes.docker.json
 ```
 
-Leave the watchdog running. In a second terminal, start the app and check it over HTTP:
+Then start the app and check it over HTTP:
 
 ```sh
 docker compose -p proxy-demo-app -f examples/totaljs/compose.yaml up -d
 curl --resolve hello.localhost:80:127.0.0.1 http://hello.localhost/
 ```
 
-Allow time for `npm install` and the route to appear. Only Proxy publishes host ports. To add another app, give its service a distinct container name, attach it to `proxy` and set its own `PROXY_HOST`. For public HTTPS, use a real domain with the `https://` prefix and point its DNS at Proxy. See [Docker discovery](docker-discovery.md) for multiple hostnames, custom certificates and access logs.
+Allow time for `npm install`. Proxy sees the container join the `proxy` network and writes `examples/totaljs/data/sites/hello.localhost.json`; `docker compose stop` removes it again. Only Proxy publishes host ports. To add another app, attach its service to `proxy` and set its own `PROXY_HOST`. For public HTTPS, use a real domain with the `https://` prefix and point its DNS at Proxy. See [Docker discovery](docker-discovery.md) for the variables, the Docker socket and the alternatives to mounting it.
 
-### Choose how to manage routes
-
-Set `routes_file` to manage routes with a JSON file such as the example. Mount its containing directory read-only so Proxy can see both in-place edits and files replaced by an editor. Route inspection and certificate operations remain available through the control socket. Leave `routes_file` empty to manage routes through the control API.
-
-## Run with API-managed routes
+## Run with named volumes
 
 ```yaml
 services:
@@ -51,7 +53,7 @@ services:
       # - 53:53/tcp
     volumes:
       - proxy-data:/proxy/data
-      - proxy-control:/proxy/control
+      - proxy-logs:/proxy/logs
 
 networks:
   default:
@@ -60,11 +62,11 @@ networks:
 
 volumes:
   proxy-data:
-  proxy-control:
+  proxy-logs:
 ```
 
-Proxy and the project containers share the `proxy` network, so a route can point to a container by its name.
+Proxy and the project containers share the `proxy` network, so a site can point to a container by its name. With named volumes, write `config.json` and the site files inside the `proxy-data` volume, or let [Docker discovery](docker-discovery.md) write the sites.
 
-The image runs as the `node` user and can bind the low ports. Clients in another container can mount the `proxy-control` volume and connect to `/proxy/control/proxy.sock`. The socket is owner-only, so the client needs the owning UID or root access. Keep `proxy-data` mounted only in Proxy. For a bind mount instead of a named volume, make the host directory writable by the container’s `node` user.
+The image runs as the `node` user and can bind the low ports. Keep `proxy-data` mounted only in Proxy: it has the private keys. For a bind mount instead of a named volume, make the host directory writable by the container's `node` user.
 
-See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, site files and Compose YAML together.

@@ -5,17 +5,14 @@ services:
     restart: unless-stopped
     depends_on:
       - flow
-    command: ["node", "index.js", "proxy.conf"]
     ports:
       - "${FLOW_BIND:-127.0.0.1}:80:80"
       - "${FLOW_BIND:-127.0.0.1}:443:443"
     volumes:
       - proxy-data:/proxy/data
     configs:
-      - source: proxy-config
-        target: /proxy/proxy.conf
-      - source: flow-route
-        target: /proxy/routes.json
+      - source: flow-site
+        target: /proxy/data/sites/flow.json
 
   flow:
     image: totalplatform/flow:11
@@ -25,19 +22,13 @@ services:
       - flow-streams:/www/.src/flowstream
 
 configs:
-  proxy-config:
+  flow-site:
     content: |
-      routes_file : routes.json
-  flow-route:
-    content: |
-      [
-        {
-          "id": "flow",
-          "hosts": ["${FLOW_HOST:-flow.localhost}"],
-          "target": "http://flow:8000",
-          "tls": "${FLOW_TLS:-off}"
-        }
-      ]
+      {
+        "hosts": ["${FLOW_HOST:-flow.localhost}"],
+        "target": "flow:8000",
+        "cert": "${FLOW_CERT:-off}"
+      }
 
 volumes:
   proxy-data:

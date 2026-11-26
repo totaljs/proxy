@@ -1,132 +1,115 @@
 'use strict';
 
-// The visits of a site (route option "stats"): pages, visitors without personal data, search engines and AI agents,
-// 404 and 5xx, files per day, and the control API.
+// The requests of each site are counted: how many, with which answer, how long. Nothing more.
 
 const Test = require('node:test');
 const Assert = require('node:assert/strict');
 const Fs = require('node:fs');
 const Path = require('node:path');
-const Http = require('node:http');
+const Net = require('node:net');
 const Stats = require('../lib/stats');
-const { proxy: start, request, tmpdir } = require('./helpers');
+const { proxy: start, backend: makebackend, request, tmpdir } = require('./helpers');
 
-async function backend() {
-	const server = Http.createServer(function(req, res) {
-		req.resume();
-		const code = req.url.startsWith('/missing') ? 404 : req.url.startsWith('/broken') ? 500 : req.url.startsWith('/old') ? 301 : 200;
-		res.writeHead(code, code === 301 ? { location: '/new' } : { 'content-type': 'text/html' });
-		res.end('ok');
-	});
-	await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-	server.port = server.address().port;
-	return server;
-}
+Test('the counters of a site', function() {
+	const folder = Path.join(tmpdir(), 'stats');
+	const stats = new Stats(folder, 2);
+	const noon = Date.parse('2026-11-26T12:30:00Z');
 
-const PERSON = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15';
-const OTHER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36';
+	stats.hit('totaljs.com', 200, 12);
+	stats.hit('totaljs.com', 204, 3);
+	stats.hit('totaljs.com', 301, 1);
+	stats.hit('totaljs.com', 404, 2);
+	stats.hit('totaljs.com', 503, 30);
+	stats.failed('totaljs.com');
+	stats.websocket('totaljs.com');
+	stats.hit('other.test', 200, 5);
+	// Nothing is written while requests are counted
+	Assert.equal(Fs.existsSync(folder), false);
 
-Test('the visits of a site', async function(t) {
+	stats.fold(noon);
+	stats.save(noon);
+	const read = id => JSON.parse(Fs.readFileSync(Path.join(folder, id + '.json'), 'utf8'));
+	const site = read('totaljs.com');
+	Assert.deepEqual(site.total, { requests: 5, '2xx': 2, '3xx': 1, '4xx': 1, '5xx': 1, ms: 48, failed: 1, websockets: 1 });
+	const day = site.days['2026-11-26'];
+	Assert.equal(day.requests, 5);
+	Assert.equal(day['5xx'], 1);
+	Assert.equal(day.hours.length, 24);
+	Assert.equal(day.hours[12], 5);
+	Assert.equal(day.hours.reduce((a, b) => a + b), 5);
+	Assert.equal(read('other.test').total.requests, 1);
 
-	const app = await backend();
-	const data = tmpdir();
-	const routes = [
-		{ id: 'shop', hosts: ['shop.test'], target: 'http://127.0.0.1:' + app.port, https: false, tls: 'off', stats: true },
-		{ id: 'blog', hosts: ['blog.test'], target: 'http://127.0.0.1:' + app.port, https: false, tls: 'off' }
-	];
-	const proxy = await start({ data }, routes);
-	t.after(async () => {
-		await proxy.stop();
-		app.close();
-		Fs.rmSync(data, { recursive: true, force: true });
-	});
+	// The next hour and the next days go on from the file; the days past "stats_days" go
+	const again = new Stats(folder, 2);
+	again.hit('totaljs.com', 200, 10);
+	again.fold(noon + 3600000);
+	again.hit('totaljs.com', 500, 10);
+	again.fold(noon + 86400000);
+	again.save(noon + 86400000);
+	Assert.equal(read('totaljs.com').total.requests, 7);
+	Assert.equal(read('totaljs.com').days['2026-11-26'].hours[13], 1);
+	Assert.equal(read('totaljs.com').days['2026-11-27'].requests, 1);
+	again.hit('totaljs.com', 200, 1);
+	again.fold(noon + 4 * 86400000);
+	again.save(noon + 4 * 86400000);
+	Assert.deepEqual(Object.keys(read('totaljs.com').days), ['2026-11-30']);
+	// The total is of all time
+	Assert.equal(read('totaljs.com').total.requests, 8);
 
-	const visit = (host, path, ua, headers) => request({ port: proxy.ports.http, host, path, headers: Object.assign({ 'user-agent': ua }, headers) });
-	const control = (path, method) => request({ socketPath: proxy.config.control, path, method });
-
-	await t.test('who asked: a person, a search engine, an AI agent or another bot', function() {
-		Assert.deepEqual(Stats.client(PERSON), { kind: 'person', name: '' });
-		Assert.deepEqual(Stats.client('Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'), { kind: 'search', name: 'Googlebot' });
-		Assert.deepEqual(Stats.client('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)'), { kind: 'ai', name: 'ClaudeBot' });
-		Assert.deepEqual(Stats.client('Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)'), { kind: 'ai', name: 'GPTBot' });
-		Assert.equal(Stats.client('curl/8.4.0').kind, 'bot');
-		// The own name of a robot, not "Mozilla"
-		Assert.deepEqual(Stats.client('Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)'), { kind: 'bot', name: 'SemrushBot' });
-		Assert.deepEqual(Stats.client('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/120.0 Safari/537.36'), { kind: 'bot', name: 'HeadlessChrome' });
-		Assert.equal(Stats.client('curl/8.4.0').name, 'curl');
-		Assert.equal(Stats.client('').kind, 'bot');
-	});
-
-	await t.test('pages, visitors, referrers, errors and agents of a site that asks for them', async function() {
-		await visit('shop.test', '/', PERSON, { referer: 'https://www.google.com/search?q=shop' });
-		await visit('shop.test', '/products?page=2', PERSON);
-		await visit('shop.test', '/products', OTHER, { 'x-forwarded-for': '10.0.0.9' });
-		await visit('shop.test', '/js/app.js', PERSON);
-		await visit('shop.test', '/media/intro.en.vtt', PERSON);
-		await visit('shop.test', '/missing', PERSON);
-		await visit('shop.test', '/broken', PERSON);
-		await visit('shop.test', '/old', PERSON);
-		await visit('shop.test', '/', 'Mozilla/5.0 (compatible; Googlebot/2.1)');
-		await visit('shop.test', '/products', 'Mozilla/5.0 (compatible; ClaudeBot/1.0)');
-		await visit('shop.test', '/', PERSON, { referer: 'http://shop.test/products' });
-		// Blog does not ask: nothing counted
-		await visit('blog.test', '/', PERSON);
-
-		const days = (await control('/stats/shop')).json;
-		Assert.equal(days.length, 1);
-		const day = days[0];
-		// Pages of people: /, /products, /products, /missing (404), /broken (500), / again; not the script, not the redirect
-		Assert.equal(day.views, 6);
-		// Two people (two browsers); the same person again is not a new visitor
-		Assert.equal(day.visitors, 2);
-		Assert.equal(day.paths['/products'].views, 2);
-		Assert.ok(!day.paths['/js/app.js']);
-		Assert.equal(day.search, 1);
-		Assert.equal(day.ai, 1);
-		Assert.deepEqual(day.referrers, { 'google.com': 1 });
-		Assert.deepEqual(day.notfound, { '/missing': 1 });
-		Assert.deepEqual(day.errors, { '/broken': 1 });
-		Assert.equal(day.agents.Googlebot.kind, 'search');
-		Assert.deepEqual(day.agents.ClaudeBot.paths, { '/products': 1 });
-		Assert.equal(day.hours.reduce((sum, hour) => sum + hour.views, 0), 6);
-		// No address and no user agent of a person is kept
-		const text = JSON.stringify(day);
-		Assert.ok(!text.includes('127.0.0.1') && !text.includes('Safari'));
-		Assert.deepEqual((await control('/stats/blog')).json, []);
-	});
-
-	await t.test('the days go to a file, and DELETE removes them', async function() {
-		proxy.stats.flush();
-		const day = new Date().toISOString().substring(0, 10);
-		const file = Path.join(data, 'stats', 'shop', day + '.json');
-		Assert.equal(JSON.parse(Fs.readFileSync(file, 'utf8')).views, 6);
-		Assert.equal((await control('/stats/../x')).status === 200, false);
-		Assert.equal((await control('/stats/shop', 'DELETE')).status, 200);
-		Assert.ok(!Fs.existsSync(file));
-	});
+	// What a worker counted is added; what is not a count or not a site is left out
+	const primary = new Stats(folder, 2);
+	const sent = [];
+	const worker = new Stats(folder, 2, { send: counted => sent.push(counted) });
+	worker.hit('fresh.test', 200, 4);
+	worker.hit('fresh.test', 200, 6);
+	worker.fold();
+	worker.fold();
+	Assert.deepEqual(sent, [{ 'fresh.test': [2, 2, 0, 0, 0, 10, 0, 0] }]);
+	primary.take(JSON.parse(JSON.stringify(sent[0])));
+	primary.take({ '../outside': [9, 9, 9, 9, 9, 9, 9, 9], 'fresh.test': [-5, 'x', null, 1.5] });
+	Assert.deepEqual(primary.get('fresh.test').total, { requests: 2, '2xx': 2, '3xx': 0, '4xx': 0, '5xx': 0, ms: 10, failed: 0, websockets: 0 });
+	primary.save();
+	Assert.equal(Fs.existsSync(Path.join(folder, '..', 'outside.json')), false);
 });
 
-Test('the unique visitor cap preserves page counts and is reset each UTC day', function(t) {
+Test('the proxy counts the requests of every site', async function(t) {
+	const backend = await makebackend();
 	const data = tmpdir();
-	t.after(() => Fs.rmSync(data, { recursive: true, force: true }));
-	const stats = new Stats(data, 10);
-	const route = { id: 'shop', stats: true };
-	const time = Date.UTC(2026, 0, 1);
-	const info = { method: 'GET', path: '/', status: 200, ip: '127.0.0.1', time };
-	for (let i = 0; i < 50001; i++) {
-		info.ua = 'Mozilla/' + i;
-		stats.record(route, info);
-	}
-	const day = stats.get('shop', '2026-01-01', '2026-01-01')[0];
-	Assert.equal(day.views, 50001);
-	Assert.equal(day.visitors, 50000);
-	Assert.equal(day.visitors_capped, true);
-	Assert.equal(stats.seenCount, 50000);
+	const proxy = await start({ data }, [
+		{ id: 'app.test', hosts: ['app.test'], redirects: ['www.app.test'], target: '127.0.0.1:' + backend.port, deny: ['10.0.0.0/8'] },
+		{ id: 'down.test', hosts: ['down.test'], target: '127.0.0.1:9', logs: false }
+	]);
+	proxy.manager.stop();
+	t.after(() => backend.close());
+	const get = (host, path) => request({ port: proxy.ports.http, host, path });
 
-	info.time += 86400000;
-	stats.record(route, info);
-	const next = stats.get('shop', '2026-01-02', '2026-01-02')[0];
-	Assert.equal(next.visitors, 1);
-	Assert.equal(next.visitors_capped, undefined);
-	Assert.equal(stats.seenCount, 1);
+	for (let i = 0; i < 3; i++)
+		Assert.equal((await get('app.test', '/page')).status, 200);
+	Assert.equal((await get('app.test', '/app.js')).status, 200);
+	Assert.equal((await get('www.app.test')).status, 301);
+	Assert.equal((await get('down.test')).status, 503);
+	Assert.equal((await get('nobody.test')).status, 404);
+
+	// A WebSocket that is opened
+	await new Promise((resolve, reject) => {
+		const socket = Net.connect(proxy.ports.http, '127.0.0.1', () => socket.write('GET /live HTTP/1.1\r\nHost: app.test\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n'));
+		socket.once('data', chunk => {
+			/^HTTP\/1\.1 101/.test(chunk) ? resolve() : reject(new Error(String(chunk)));
+			socket.destroy();
+		});
+		socket.once('error', reject);
+	});
+
+	const app = proxy.stats.get('app.test').total;
+	Assert.deepEqual([app.requests, app['2xx'], app['3xx'], app['4xx'], app['5xx'], app.failed, app.websockets], [5, 4, 1, 0, 0, 0, 1]);
+	Assert.ok(app.ms >= 0);
+	const down = proxy.stats.get('down.test').total;
+	Assert.deepEqual([down.requests, down['5xx'], down.failed], [1, 1, 1]);
+
+	// Written when the proxy stops; a host that no site has is not counted
+	await proxy.stop();
+	Assert.deepEqual(Fs.readdirSync(Path.join(data, 'stats')).sort(), ['app.test.json', 'down.test.json']);
+	const saved = JSON.parse(Fs.readFileSync(Path.join(data, 'stats', 'app.test.json'), 'utf8'));
+	Assert.equal(saved.total.requests, 5);
+	Assert.equal(Object.values(saved.days)[0].requests, 5);
 });

@@ -1,20 +1,26 @@
 'use strict';
 
 // Total.js Proxy
-// node index.js [config]
+// node index.js [data]
+//
+// data: the folder with config.json and sites/*.json (default: data). Both are watched and applied by themselves.
 
-const Config = require('./lib/config');
-const ProxyServer = require('./lib/server');
+const Runner = require('./lib/runner');
 
-const proxy = new ProxyServer(Config.load(process.argv[2] || 'config'));
+const runner = new Runner(process.argv[2] || 'data', {
+	fatal: function(err) {
+		console.error(err.message);
+		process.exit(1);
+	}
+});
 
-proxy.start().catch(function(err) {
+runner.start().catch(function(err) {
 	console.error(err.message);
 	process.exit(1);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
 	process.once(signal, function() {
-		proxy.stop().finally(() => process.exit(0));
+		runner.stop().finally(() => process.exit(0));
 	});
 }

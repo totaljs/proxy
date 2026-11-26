@@ -1,0 +1,5 @@
+{
+	"workers": 1,
+	"logs_maxsize": 100,
+	"docker_network": "proxy"
+}

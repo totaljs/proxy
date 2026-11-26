@@ -1,54 +1,19 @@
 # Discover Docker apps
 
-This example runs two copies of Flow on one Proxy. The operations copy keeps a hand-written route. The second copy appears automatically while its container is running on the Docker network `proxy`.
+A container that joins the Docker network `proxy` can publish itself. It says in its environment which host names it serves, and Proxy writes its site file. When the container stops, Proxy removes the file. Nothing else is needed: no route to write, no reload.
 
-| App | Public hostname | Source |
-|---|---|---|
-| Operations | `ops.example.com` | `routes.json` |
-| Demo | `demo.example.com` | Docker container labels |
-
-## Configure Proxy
-
-Use a Proxy build that supports `docker_routes_file`. To build from the source checkout, run `docker build -t proxy-discovery .` and set the Proxy service image to `proxy-discovery`.
-
-In the Proxy config, add these two settings:
-
-```text
-routes_file        : routing/routes.json
-docker_routes_file : discovered/routes.docker.json
-```
-
-Keep the manual file under `./routing` and create a separate directory for the generated file. Add both directory mounts to the Proxy service in Compose:
-
-```yaml
-services:
-  proxy:
-    volumes:
-      - ./routing:/proxy/routing:ro
-      - ./discovered:/proxy/discovered:ro
-```
-
-This example assumes the config is at `/proxy/proxy.conf` and Proxy is already attached to `proxy`. Keep your existing config and data mounts. Mount the directories so that atomic file replacement is visible inside the container. The generated file can be missing at startup. This setup uses file-managed routing. The control API still lists routes and certificate status.
-
-## Declare domains in the app Compose file
-
-Use the same environment variables in a generated Compose file. The working [Total.js example](../examples/totaljs/compose.yaml) shows the standalone setup. The following is a generator template. Substitute the app ID and the host paths for `www` and `npm` before running Compose.
+## Declare the site in the app's Compose file
 
 ```yaml
 services:
   app:
-    container_name: "{{ value.id }}"
+    container_name: totaljs-app
     image: totalplatform/run:npm
     restart: always
-    volumes:
-      - "{{ value.www }}:/www"
-      - "{{ value.npm }}:/node_modules:ro"
     environment:
-      PROXY_HOST: "https://example.com,https://www.example.com"
-      PROXY_PORT: "80"
-      # Optional directory under Proxy's custom_cert_dir.
-      # PROXY_CERT: shared/example
-      PROXY_LOGS: "true"
+      PROXY_HOST: "totaljs.com,www.totaljs.com"
+      PROXY_PORT: "8000"
+      PROXY_LOGS: "TRUE"
     networks: [proxy]
 
 networks:
@@ -56,70 +21,90 @@ networks:
     external: true
 ```
 
-| Variable | What it configures |
+| Variable | What it sets |
 | --- | --- |
-| `PROXY_HOST` | Comma-separated hostnames or HTTP(S) origins without paths or ports. `https://` selects automatic certificates, and `http://` selects HTTP. A bare hostname uses HTTP unless a custom certificate is configured. Set an empty value to disable discovery for a temporary container. |
-| `PROXY_PORT` | The actual HTTP port inside the app container, defaulting to 80. The app must listen on this port. Use 8000 for apps that listen there. |
-| `PROXY_CERT` | Optional directory relative to Proxy's `custom_cert_dir`. Proxy uses `fullchain.pem` and `privkey.pem` from that directory for HTTPS or bare host entries. Multiple apps can reference the same wildcard certificate. Mount these files into Proxy. |
-| `PROXY_LOGS` | Set to `true` to enable or `false` to disable per-route access logs. Proxy needs a configured access log destination. |
+| `PROXY_HOST` | Comma-separated host names. The first one names the site and its file. `https://totaljs.com` serves that name over HTTPS with a Let's Encrypt certificate, a bare name or `http://` serves HTTP. The names go to the file as written. An empty value publishes nothing. |
+| `PROXY_PORT` | The port the app listens on inside the container. Default `80`. |
+| `PROXY_LOGS` | `TRUE` or `FALSE`: whether the requests go to `logs/<site>.log`. Default: on. |
+| `PROXY_CERT` | The `cert` of the site: `auto` (Let's Encrypt for every name that does not say `http://`), `custom` (your certificate from `data/certs`, never Let's Encrypt) or `off`. Any other value is a folder under Proxy's `custom_cert_dir` with `fullchain.pem` and `privkey.pem`. Without it, only the names written as `https://` are served over HTTPS. |
 
-The watchdog also accepts the `proxy.host`, `proxy.port` and `proxy.tls` labels. When `PROXY_HOST` is set, it takes precedence over labels. Hand-written routes keep priority over discovered routes.
+While that container runs, Proxy keeps this file:
 
-## Add one route by hand
-
-Keep this entry in `./routing/routes.json`. Connect its upstream `flow-ops` to `proxy`.
+`data/sites/totaljs.com.json`
 
 ```json
-[
-  {
-    "id": "flow-ops",
-    "hosts": ["ops.example.com"],
-    "target": "http://flow-ops:8000",
-    "tls": "auto"
-  }
-]
+{
+  "hosts": ["totaljs.com", "www.totaljs.com"],
+  "target": "172.18.0.5:8000",
+  "logs": true,
+  "docker": "totaljs-app"
+}
 ```
 
-## Discover the second app
+`target` is the address of the container on the network, so it follows the container when Docker gives it another address. `docker` is the name of the container: it marks the file as written by discovery.
 
-In the demo app's Compose project, label the service with its public hostname and internal HTTP port, then attach it to the same network:
+The labels `proxy.host`, `proxy.port` and `proxy.cert` do the same for one host name. The environment wins when both are set.
+
+## What happens when containers change
+
+| Event | Result |
+| --- | --- |
+| A container with `PROXY_HOST` starts on the network | Its file is written and the site is served a moment later. |
+| It is recreated with other values or gets another address | The file is written again. |
+| It stops, is removed or leaves the network | Its file is removed and the host names answer `404`. |
+| Proxy starts | The files are brought in step with the containers that run now. |
+| Docker cannot be asked | Nothing is removed. Proxy keeps the files it has and tries again. |
+
+Proxy listens to Docker's events and also checks every 30 seconds.
+
+## Files written by hand stay yours
+
+Discovery only removes and rewrites files that have `"docker"` in them. A site you wrote yourself is never touched, also when a container declares the same first host name: that container is not published and `logs/error.log` says so. The same file reports a container with a wrong value and two containers that declare the same site. A container can never take a host name from another site:
+
+- A name of a site you wrote yourself stays with it, also after Proxy starts again, and so does every name under its wildcard (`*.example.com`).
+- Between two containers, the one that is published keeps its name. The first name of a container is never given to another one as one more of its names.
+- The container that asked for a taken name is not published at all, and `logs/error.log` says which name and whose it is.
+
+Every container on the `proxy` network may still publish any name that nobody has yet, so put only containers you trust on that network.
+
+Do not edit a file that discovery wrote: the next sync writes it again. Change the environment of the container, or remove `PROXY_HOST` from it and write the file yourself.
+
+## Let Proxy reach Docker
+
+Proxy asks Docker through its socket. Mount it in the Proxy service and add the group that owns the socket on the host:
 
 ```yaml
 services:
-  flow-demo:
-    image: totalplatform/flow:11
-    volumes:
-      - demo-data:/www/.src/databases
-    labels:
-      proxy.host: demo.example.com
-      proxy.port: "8000"
-      proxy.tls: auto
-    networks: [proxy]
-
-volumes:
-  demo-data:
-
-networks:
   proxy:
-    external: true
+    volumes:
+      - ./data:/proxy/data
+      - ./logs:/proxy/logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "${DOCKER_GID:-0}"
+    networks: [proxy]
 ```
 
-Use a distinct, single-label container name for each app. The watchdog uses that name to reach the upstream on Docker DNS. The `proxy.tls` label defaults to `off` and also accepts `custom` and `auto`. Follow the [Flow setup guide](flow.md) to configure Flow privately before pointing the public DNS records at Proxy.
+Find the group with `stat -c %g /var/run/docker.sock` and set `DOCKER_GID`. Without the socket Proxy runs as before, with the sites you write yourself.
 
-From the Proxy source checkout on the Docker host, run the watchdog. Replace the example path with the host directory mounted above.
+The settings in `data/config.json`:
 
-```sh
-node scripts/docker-watch.js proxy /srv/proxy/discovered/routes.docker.json
-```
+| Key | Default | |
+|---|---|---|
+| `docker` | `/var/run/docker.sock` | The socket of Docker, or `http://host:port` of a socket proxy. Empty turns discovery off. |
+| `docker_network` | `proxy` | The network whose containers publish themselves. Proxy must be attached to it to reach them. |
 
-The host account running this command needs Docker access and write access to the generated file's directory. Proxy reads that directory through its read-only mount. Use `--once` at the end of the command to generate a single snapshot.
+### Without giving Proxy the socket
 
-## Check what happens when apps change
+Whoever can use the Docker socket controls Docker on that host, and Proxy faces the internet. Two ways to keep the socket away from it:
 
-1. Run `docker compose up -d flow-demo` in the demo project. The watchdog refreshes its snapshot on Docker network events. Proxy checks the files every five seconds.
-2. Check Proxy's route list. It should show the manual operations route and the discovered demo route. Stop the demo with `docker compose stop flow-demo` and check again. Only the operations route remains.
-3. If you put `demo.example.com` in the manual file, Proxy uses the manual route, including when the manual route is a matching wildcard. This also applies to manual redirect hostnames and colliding route IDs. If two discovered containers declare the same hostname, the watchdog publishes neither for that hostname.
+- **A socket proxy.** Run a Docker socket proxy that allows only reading containers, networks and events, and set `"docker": "http://docker-socket-proxy:2375"`. Proxy only sends `GET /networks/<name>`, `GET /containers/<id>/json` and `GET /events`.
+- **The script on the host.** Set `"docker": ""` and run discovery outside the container. It writes the same files into the mounted sites folder:
 
-The watchdog also reconciles at startup, after reconnecting to Docker events, and every 30 seconds. When Docker cannot be inspected, it keeps the previous snapshot. If you disable discovery permanently, remove `docker_routes_file` from the Proxy config or remove the generated file.
+  ```sh
+  node scripts/docker-watch.js /srv/proxy/data/sites proxy
+  ```
 
-See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
+  The account needs Docker access and write access to the folder. Add `--once` for a single sync.
+
+See the [complete configuration example](examples.md) for the Proxy config, site files and Compose YAML together.

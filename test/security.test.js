@@ -6,6 +6,8 @@
 
 const Test = require('node:test');
 const Assert = require('node:assert/strict');
+const Path = require('node:path');
+const Fs = require('node:fs');
 const Net = require('node:net');
 const Routes = require('../lib/routes');
 const Limiter = require('../lib/limiter');
@@ -42,7 +44,7 @@ Test('routes: names that redirect to any address, and the page of the site', fun
 
 	// Certificates for the names that redirect too
 	const routes = new Routes('/dev/null');
-	routes.items.set(route.id, Object.assign(route, { tls: 'auto' }));
+	routes.items.set(route.id, Object.assign(route, { cert: 'auto' }));
 	routes.rebuild();
 	Assert.deepEqual(routes.tlshosts().map(item => item.host), ['old.example.com', 'promo.example.com']);
 	Assert.equal(routes.lookup('old.example.com').forward.to, 'https://new.example.com/es/');
@@ -73,15 +75,15 @@ Test('redirects, pages, maintenance and the settings of every site', async funct
 	const backend = await makebackend();
 	const target = 'http://127.0.0.1:' + backend.port;
 	const proxy = await start({}, [
-		{ id: 'shop', hosts: ['shop.test'], target, tls: 'off', forwards: [{ host: 'old.test', to: 'https://shop.example.com/' }, { host: 'promo.test', to: 'https://shop.example.com/offer', path: false, permanent: false }] },
-		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off', page: '<h1>Resting</h1>' },
-		{ id: 'fixing', hosts: ['fixing.test'], target, tls: 'off', maintenance: true, page: '<h1>Fixing things</h1>' },
-		{ id: 'code', hosts: ['code.test'], target, tls: 'off', limit: false }
+		{ id: 'shop', hosts: ['shop.test'], target, cert: 'off', forwards: [{ host: 'old.test', to: 'https://shop.example.com/' }, { host: 'promo.test', to: 'https://shop.example.com/offer', path: false, permanent: false }] },
+		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', cert: 'off', page: '<h1>Resting</h1>' },
+		{ id: 'fixing', hosts: ['fixing.test'], target, cert: 'off', maintenance: true, page: '<h1>Fixing things</h1>' },
+		{ id: 'code', hosts: ['code.test'], target, cert: 'off', limit: false }
 	]);
 	proxy.manager.stop();
 	const http = proxy.ports.http;
-	const socketPath = proxy.config.control;
-	const api = (method, path, body) => request({ socketPath, method, path, body: body ? JSON.stringify(body) : undefined, headers: { 'content-type': 'application/json' } });
+	const Config = require('../lib/config');
+	const { site, settings } = require('./helpers');
 
 	t.after(async () => {
 		await proxy.stop();
@@ -107,44 +109,46 @@ Test('redirects, pages, maintenance and the settings of every site', async funct
 		const fixing = await request({ port: http, host: 'fixing.test' });
 		Assert.deepEqual([fixing.status, fixing.text], [503, '<h1>Fixing things</h1>']);
 		Assert.match(await upgrade(http, 'fixing.test'), /^HTTP\/1\.1 503/);
-		// The control API takes a page of hundreds of KB
+		// A site file takes a page of hundreds of KB
 		const big = '<p>' + 'x'.repeat(300 * 1024) + '</p>';
-		Assert.equal((await api('PUT', '/routes/down', { hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off', page: big })).status, 200);
+		site(proxy, 'down', { hosts: ['down.test'], target: 'http://127.0.0.1:9', cert: 'off', page: big });
 		Assert.equal((await request({ port: http, host: 'down.test' })).text.length, big.length);
 	});
 
 	await t.test('the settings of every site', async function() {
-		Assert.deepEqual((await api('GET', '/settings')).json, {});
-		Assert.equal((await api('PUT', '/settings', { ratelimit: { rate: 5, burst: 1 } })).status, 400, 'the burst is at least the rate');
-		Assert.equal((await api('PUT', '/settings', { deny: ['not an address'] })).status, 400);
-		Assert.equal((await api('PUT', '/settings', { hsts: 'nope' })).status, 400);
+		Assert.throws(() => Config.load(null, { ratelimit: { rate: 5, burst: 20 } }), /now one number/);
+		Assert.throws(() => Config.load(null, { ratelimit: -1 }), /ratelimit/);
+		Assert.throws(() => Config.load(null, { ratelimit: 1.5 }), /ratelimit/);
+		Assert.equal(Config.load(null, {}).ratelimit, 0);
+		Assert.throws(() => Config.load(null, { deny: ['not an address'] }), /not an address/);
+		Assert.throws(() => Config.load(null, { hsts: 'nope' }), /max-age/);
+		Assert.throws(() => Config.load(null, { page: 'x'.repeat(600 * 1024) }), /512 KB/);
 
-		const saved = await api('PUT', '/settings', { headers: 'X-Server-Wide: yes', hsts: 'max-age=600', page: '<h1>Everybody rests</h1>' });
-		Assert.equal(saved.status, 200);
+		await settings(proxy, { headers: 'X-Server-Wide: yes', hsts: 'max-age=600', page: '<h1>Everybody rests</h1>' });
 		Assert.equal((await request({ port: http, host: 'shop.test' })).headers['x-server-wide'], 'yes');
-		// The page of the settings for a site without its own
-		await api('PUT', '/routes/down', { hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off' });
+		// The page of the config for a site without its own
+		site(proxy, 'down', { hosts: ['down.test'], target: 'http://127.0.0.1:9', cert: 'off' });
 		Assert.equal((await request({ port: http, host: 'down.test' })).text, '<h1>Everybody rests</h1>');
 
-		// The limit: a few at once, then 429 with Retry-After; a route with limit off skips the rate limit
-		await api('PUT', '/settings', { ratelimit: { rate: 1, burst: 3 } });
+		// The limit: one request a second, four at once, then 429 with Retry-After; a site with limit off skips it
+		await settings(proxy, { ratelimit: 1 });
 		const statuses = [];
-		for (let i = 0; i < 5; i++)
+		for (let i = 0; i < 6; i++)
 			statuses.push((await request({ port: http, host: 'shop.test' })).status);
-		Assert.deepEqual(statuses, [200, 200, 200, 429, 429]);
+		Assert.deepEqual(statuses, [200, 200, 200, 200, 429, 429]);
 		const limited = await request({ port: http, host: 'shop.test' });
 		Assert.ok(+limited.headers['retry-after'] >= 1);
+		// Another change of the config does not start the count of each address again
+		await settings(proxy, { ratelimit: 1, maxupload: 7 });
+		Assert.equal((await request({ port: http, host: 'shop.test' })).status, 429);
 		Assert.equal((await request({ port: http, host: 'code.test' })).status, 200);
 
 		// Addresses that never come in, to any site
-		await api('PUT', '/settings', { deny: ['127.0.0.0/8'] });
+		await settings(proxy, { deny: ['127.0.0.0/8'] });
 		Assert.equal((await request({ port: http, host: 'code.test' })).status, 403);
 		Assert.match(await upgrade(http, 'shop.test'), /^HTTP\/1\.1 403/);
 
-		// Kept: the proxy starts again with them
-		proxy.settings.load();
-		Assert.deepEqual(proxy.settings.get().deny, ['127.0.0.0/8']);
-		await api('PUT', '/settings', {});
+		await settings(proxy, {});
 		Assert.equal((await request({ port: http, host: 'shop.test' })).status, 200);
 	});
 });

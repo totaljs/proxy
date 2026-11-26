@@ -1,0 +1,6 @@
+{
+	"hosts": ["app.example.com"],
+	"target": "app:8000",
+	"cert": "auto",
+	"logs": true
+}

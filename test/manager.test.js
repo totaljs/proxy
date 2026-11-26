@@ -9,8 +9,8 @@ const { proxy: start, tmpdir } = require('./helpers');
 Test('certificate states', async function(t) {
 
 	const proxy = await start({ dns_zone: 'acme.code.test', precheck: true }, [
-		{ id: 'clients', hosts: ['*.clientes.invalid'], target: 'http://127.0.0.1:9', tls: 'auto' },
-		{ id: 'shop', hosts: ['shop.invalid'], target: 'http://127.0.0.1:9', tls: 'auto' },
+		{ id: 'clients', hosts: ['*.clientes.invalid'], target: 'http://127.0.0.1:9', cert: 'auto' },
+		{ id: 'shop', hosts: ['shop.invalid'], target: 'http://127.0.0.1:9', cert: 'auto' },
 		{ id: 'plain', hosts: ['plain.invalid'], target: 'http://127.0.0.1:9' }
 	]);
 	proxy.manager.stop();
@@ -62,7 +62,7 @@ Test('staging certificates are replaced on the real server', async function(t) {
 	make('test.invalid', '(STAGING) Fake Bulgur');
 	make('real.invalid', 'Fake Real CA');
 
-	const routes = [{ id: 'a', hosts: ['test.invalid'], target: 'http://127.0.0.1:9', tls: 'auto' }, { id: 'b', hosts: ['real.invalid'], target: 'http://127.0.0.1:9', tls: 'auto' }];
+	const routes = [{ id: 'a', hosts: ['test.invalid'], target: 'http://127.0.0.1:9', cert: 'auto' }, { id: 'b', hosts: ['real.invalid'], target: 'http://127.0.0.1:9', cert: 'auto' }];
 
 	const staging = await start({ data, acme: 'https://acme-staging-v02.api.letsencrypt.org/directory' }, routes);
 	staging.manager.stop();
@@ -83,7 +83,7 @@ Test('staging certificates are replaced on the real server', async function(t) {
 
 Test('certificate retry deadlines survive a restart', async function(t) {
 	const data = tmpdir();
-	const routes = [{ id: 'shop', hosts: ['shop.invalid'], target: 'http://127.0.0.1:9', tls: 'auto' }];
+	const routes = [{ id: 'shop', hosts: ['shop.invalid'], target: 'http://127.0.0.1:9', cert: 'auto' }];
 	const first = await start({ data }, routes);
 	first.manager.stop();
 	await first.manager.sync();
@@ -115,10 +115,10 @@ Test('an invalid custom certificate is diagnosed without disabling another site'
 	selfsigned(custom, 'plain', ['plain.test']);
 	const target = 'http://127.0.0.1:' + backend.port;
 	const proxy = await start({ data }, [
-		{ id: 'good', hosts: ['good.test'], target, tls: 'custom' },
-		{ id: 'bad', hosts: ['bad.test'], target, tls: 'custom' },
-		{ id: 'wrong-name', hosts: ['wrong-name.test'], target, tls: 'custom' },
-		{ id: 'plain', hosts: ['plain.test'], target, tls: 'off' }
+		{ id: 'good', hosts: ['good.test'], target, cert: 'custom' },
+		{ id: 'bad', hosts: ['bad.test'], target, cert: 'custom' },
+		{ id: 'wrong-name', hosts: ['wrong-name.test'], target, cert: 'custom' },
+		{ id: 'plain', hosts: ['plain.test'], target, cert: 'off' }
 	]);
 	t.after(async () => {
 		await proxy.stop();
@@ -130,12 +130,13 @@ Test('an invalid custom certificate is diagnosed without disabling another site'
 	proxy.log = message => events.push(message);
 	await proxy.manager.sync();
 	await proxy.manager.sync();
-	const status = await request({ socketPath: proxy.config.control, path: '/status' });
-	Assert.equal(status.json.hosts['good.test'].state, 'valid');
-	Assert.equal(status.json.hosts['bad.test'].state, 'error');
-	Assert.match(status.json.hosts['bad.test'].error, /matching .key/);
-	Assert.match(status.json.hosts['wrong-name.test'].error, /wrong-name\.test\.crt does not cover this hostname/);
-	Assert.equal(status.json.hosts['plain.test'], undefined);
+	// The state of each certificate, as data/status.json has it
+	const status = JSON.parse(Fs.readFileSync(Path.join(data, 'status.json'), 'utf8'));
+	Assert.equal(status['good.test'].state, 'valid');
+	Assert.equal(status['bad.test'].state, 'error');
+	Assert.match(status['bad.test'].error, /matching .key/);
+	Assert.match(status['wrong-name.test'].error, /wrong-name\.test\.crt does not cover this hostname/);
+	Assert.equal(status['plain.test'], undefined);
 	Assert.equal((await request({ port: proxy.ports.http, host: 'plain.test' })).status, 200);
 	await Assert.rejects(request({ port: proxy.ports.https, secure: true, host: 'plain.test', servername: 'plain.test' }));
 	Assert.equal(events.filter(message => message.includes('bad.test')).length, 1);
@@ -143,16 +144,19 @@ Test('an invalid custom certificate is diagnosed without disabling another site'
 	Assert.equal((await request({ port: proxy.ports.https, secure: true, host: 'good.test', servername: 'good.test', ca: cert.cert })).status, 200);
 });
 
-Test('operational events can be written to their own daily file', async function(t) {
-	const AccessLog = require('../lib/accesslog');
-	const folder = tmpdir();
-	t.after(() => Fs.rmSync(folder, { recursive: true, force: true }));
-	const events = new AccessLog.Events(folder);
-	events.write('Certificates: sample.test needs a custom certificate');
-	await events.close();
-	const [file] = Fs.readdirSync(folder);
-	Assert.match(file, /^proxy-\d{4}-\d{2}-\d{2}\.log$/);
-	Assert.match(Fs.readFileSync(Path.join(folder, file), 'utf8'), /sample\.test needs a custom certificate/);
+Test('what goes wrong is written to logs/error.log', async function(t) {
+	const data = tmpdir();
+	const said = [];
+	const proxy = await start({ data }, [], { log: message => said.push(message) });
+	t.after(() => Fs.rmSync(data, { recursive: true, force: true }));
+	proxy.manager.stop();
+	proxy.log('Certificates: requesting sample.test');
+	proxy.error('Certificates: sample.test failed: no answer');
+	await proxy.stop();
+	// Both on the output, only the error in the file
+	Assert.ok(said.includes('Certificates: requesting sample.test') && said.includes('Certificates: sample.test failed: no answer'));
+	const text = Fs.readFileSync(Path.join(data, 'logs', 'error.log'), 'utf8');
+	Assert.match(text, /^\S+  Certificates: sample\.test failed: no answer\n$/);
 });
 
 Test('explicit TLS paths share a wildcard without changing other routes', async function(t) {
@@ -174,7 +178,7 @@ Test('explicit TLS paths share a wildcard without changing other routes', async 
 
 	const files = { cert_file: 'shared/wildcard.crt', key_file: 'shared/private-key.pem' };
 	const target = 'http://127.0.0.1:' + backend.port;
-	const route = (id, host, paths) => ({ id, hosts: [host], tls: 'custom', target, ...paths });
+	const route = (id, host, paths) => ({ id, hosts: [host], cert: 'custom', target, ...paths });
 	const previous = process.env.PROXY_CUSTOM_CERTS;
 	process.env.PROXY_CUSTOM_CERTS = JSON.stringify({ beta: files, alpha: { ...files, key_file: 'unset.key' } });
 	try {
@@ -195,7 +199,7 @@ Test('explicit TLS paths share a wildcard without changing other routes', async 
 	}
 	proxy.manager.stop();
 	await proxy.manager.sync();
-	const { hosts } = (await request({ socketPath: proxy.config.control, path: '/status' })).json;
+	const hosts = proxy.manager.list();
 	for (const host of ['alpha.apps.test', 'beta.apps.test', 'discovered.apps.test']) {
 		Assert.equal(hosts[host].state, 'valid');
 		const ca = host.startsWith('discovered') ? discovered.cert : wildcard.cert;
@@ -207,11 +211,8 @@ Test('explicit TLS paths share a wildcard without changing other routes', async 
 	Assert.match(hosts['escaped.apps.test'].error, /stay inside/);
 	Assert.equal((await request({ port: proxy.ports.http, host: 'broken.apps.test' })).status, 503);
 
-	const update = await request({
-		socketPath: proxy.config.control, method: 'PUT', path: '/routes/broken',
-		body: JSON.stringify(route('broken', 'broken.apps.test', files))
-	});
-	Assert.equal(update.status, 200);
+	// The file of the site with the right paths: applied without a restart
+	require('./helpers').site(proxy, 'broken', route('broken', 'broken.apps.test', files));
 	Assert.equal((await request({
 		port: proxy.ports.https, secure: true, host: 'broken.apps.test', servername: 'broken.apps.test', ca: wildcard.cert
 	})).status, 200);

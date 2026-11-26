@@ -22,12 +22,49 @@ exports.selfsigned = function(folder, name, hosts) {
 	return { key: Fs.readFileSync(key), cert: Fs.readFileSync(crt) };
 };
 
-exports.proxy = async function(overrides, routes) {
+// Writes the sites of a test as Proxy reads them: data/sites/<id>.json
+exports.sites = function(data, routes) {
+	const folder = Path.join(data, 'sites');
+	Fs.mkdirSync(folder, { recursive: true });
+	for (const route of routes) {
+		const site = Object.assign({}, route);
+		delete site.id;
+		Fs.writeFileSync(Path.join(folder, route.id + '.json'), JSON.stringify(site));
+	}
+};
+
+exports.config = function(overrides) {
 	const data = (overrides && overrides.data) || exports.tmpdir();
+	return Config.load(null, Object.assign({ http: 0, https: 0, data, acme: 'https://127.0.0.1:9/directory', precheck: false, logs: Path.join(data, 'logs'), docker: '' }, overrides));
+};
+
+// Writes (route) or removes (null) the file of a site of a proxy that runs, and has it applied at once
+exports.site = function(proxy, id, route) {
+	const file = Path.join(proxy.config.sites, id + '.json');
+	if (route) {
+		const site = Object.assign({}, route);
+		delete site.id;
+		Fs.mkdirSync(proxy.config.sites, { recursive: true });
+		Fs.writeFileSync(file + '.tmp', JSON.stringify(site));
+		Fs.renameSync(file + '.tmp', file);
+	} else
+		Fs.rmSync(file, { force: true });
+	proxy.rescan();
+};
+
+// What config.json says for every site (ratelimit, deny, headers, hsts, page), applied to a proxy that runs as a
+// change of the file is: without a restart. {} is the config the proxy started with.
+exports.settings = function(proxy, values) {
+	proxy.reconfigure(exports.config(Object.assign({}, proxy.$overrides, { data: proxy.config.data }, values)));
+};
+
+// options: of ProxyServer (the folder of the sites is read every 50 ms)
+exports.proxy = async function(overrides, routes, options) {
+	const config = exports.config(overrides);
 	if (routes)
-		Fs.writeFileSync(Path.join(data, 'routes.json'), JSON.stringify(routes));
-	const config = Config.load(null, Object.assign({ http: 0, https: 0, data, control: Path.join(data, 'proxy.sock'), acme: 'https://127.0.0.1:9/directory', precheck: false }, overrides));
-	const proxy = new ProxyServer(config, { log: false });
+		exports.sites(config.data, routes);
+	const proxy = new ProxyServer(config, Object.assign({ log: false, watch: 50, fold: 100 }, options));
+	proxy.$overrides = overrides || {};
 	await proxy.start();
 	return proxy;
 };

@@ -2,19 +2,22 @@ services:
   proxy:
     image: ${PROXY_IMAGE:-totaljs-proxy:local}
     restart: unless-stopped
+    # The group that owns /var/run/docker.sock on the host: stat -c %g /var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-0}"
     environment:
-      - PROXY_EVENTLOG
-      - PROXY_ACCESSLOG
-      - PROXY_ACCESSLOG_DEFAULT
       - PROXY_CUSTOM_CERTS
+      - PROXY_WORKERS
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./proxy.conf:/proxy/proxy.conf:ro
-      - ./:/proxy/routing:ro
-      - proxy-data:/proxy/data
-    command: ["node", "index.js", "proxy.conf"]
+      # config.json and sites/*.json: edit them here, Proxy applies the changes by itself
+      - ./data:/proxy/data
+      - ./logs:/proxy/logs
+      # Docker discovery: Proxy reads which containers of the network publish themselves. The socket gives full
+      # control of Docker: see docs/docker-discovery.md for a socket proxy instead.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - proxy
 
@@ -22,6 +25,3 @@ networks:
   proxy:
     name: ${PROXY_NETWORK:-proxy}
     external: true
-
-volumes:
-  proxy-data:

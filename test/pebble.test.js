@@ -110,8 +110,8 @@ Test('certificates from Pebble over HTTP and DNS', { timeout: 180000 }, async fu
 	const ca = Path.join(FOLDER, 'minica.pem');
 	const backend = await makebackend();
 	const proxy = await start({ http: 5002, dns: 0, dns_zone: 'acme.proxy.test', acme: DIRECTORY, acme_ca: ca }, [
-		{ id: 'shop', hosts: ['shop.proxy.test', '*.clientes.proxy.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'auto' },
-		{ id: 'local', hosts: ['local.proxy.test'], target: 'http://127.0.0.1:' + backend.port, tls: 'off' }
+		{ id: 'shop', hosts: ['shop.proxy.test', '*.clientes.proxy.test'], target: 'http://127.0.0.1:' + backend.port, cert: 'auto' },
+		{ id: 'local', hosts: ['local.proxy.test'], target: 'http://127.0.0.1:' + backend.port, cert: 'off' }
 	]);
 	const dns = await resolver(pebble.host, proxy);
 

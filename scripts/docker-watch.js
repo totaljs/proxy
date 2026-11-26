@@ -1,220 +1,36 @@
 'use strict';
 
-// Optional host process. Proxy only reads the generated routes file.
-const Child = require('node:child_process');
-const Crypto = require('node:crypto');
-const Fs = require('node:fs/promises');
+// Docker discovery outside the proxy, for a proxy that may not reach Docker itself (config: "docker": ""). It writes
+// the same site files as the proxy would (lib/docker.js) into the sites folder of the proxy, which applies them.
+//
+//   node scripts/docker-watch.js <data/sites> [network] [socket] [--once]
+
 const Path = require('node:path');
-const Readline = require('node:readline');
-const { setTimeout: delay } = require('node:timers/promises');
-const { promisify } = require('node:util');
-const Hosts = require('../lib/hosts');
-const Routes = require('../lib/routes');
-const execFile = promisify(Child.execFile);
+const Docker = require('../lib/docker');
 
-function containerRoutes(container) {
-	const labels = container.Config.Labels || {};
-	const env = new Map((container.Config.Env || []).filter(value => /^PROXY_(HOST|PORT|CERT|LOGS)=/.test(value))
-		.map(value => [value.slice(0, value.indexOf('=')), value.slice(value.indexOf('=') + 1)]));
-	const fromEnv = env.has('PROXY_HOST');
-	const declared = fromEnv ? env.get('PROXY_HOST').trim() : labels['proxy.host'];
-	if (!declared)
-		return [];
-	const hosts = fromEnv ? declared.split(',') : [declared];
-	if (hosts.length > 50)
-		throw new Error('PROXY_HOST supports up to 50 hostnames');
+function main() {
+	const args = process.argv.slice(2);
+	const once = args.includes('--once');
+	const [folder, network, socket, ...extra] = args.filter(arg => arg !== '--once');
+	if (!folder || extra.length)
+		throw new Error('Usage: node scripts/docker-watch.js <data/sites> [network] [socket] [--once]');
 
-	const port = fromEnv ? (env.get('PROXY_PORT') || '80') : labels['proxy.port'];
-	const name = container.Name.substring(1);
-	if (!/^[0-9]{1,5}$/.test(port || '') || +port < 1 || +port > 65535 || !/^[a-z0-9][a-z0-9_-]*$/i.test(name))
-		throw new Error('Invalid upstream port or Docker container name');
+	const say = message => console.error(new Date().toISOString() + '  ' + message);
+	const docker = new Docker({ socket: socket || '/var/run/docker.sock', network: network || 'proxy', folder: Path.resolve(folder), log: say, error: say });
 
-	const logs = fromEnv && env.has('PROXY_LOGS') ? env.get('PROXY_LOGS').toLowerCase() : '';
-	if (logs && logs !== 'true' && logs !== 'false')
-		throw new Error('PROXY_LOGS must be true or false');
-	const certificate = fromEnv ? env.get('PROXY_CERT') : '';
-	const routes = new Map();
-	for (const item of hosts) {
-		const value = item.trim();
-		const scheme = fromEnv ? /^https?:\/\//i.exec(value)?.[0].toLowerCase() : '';
-		const host = Hosts.normalize(value.slice(scheme?.length || 0));
-		if (!Hosts.valid(host, false))
-			throw new Error('Expected a hostname or an HTTP(S) origin without a port or path');
-		let tls = labels['proxy.tls'] || 'off';
-		if (fromEnv) {
-			tls = 'off';
-			if (scheme !== 'http://' && certificate)
-				tls = 'custom';
-			else if (scheme === 'https://')
-				tls = 'auto';
-		}
-		const id = 'docker-' + Crypto.createHash('sha256').update(host).digest('hex').substring(0, 40);
-		const input = { id, hosts: [host], target: 'http://' + name + ':' + port, tls };
-		if (logs)
-			input.accesslog = logs === 'true';
-		if (tls === 'custom' && certificate) {
-			input.cert_file = certificate + '/fullchain.pem';
-			input.key_file = certificate + '/privkey.pem';
-		}
-		const route = Routes.clean(Routes.validate(input));
-		if (routes.has(host) && routes.get(host).tls !== route.tls)
-			throw new Error('Conflicting TLS modes for hostname ' + host);
-		routes.set(host, route);
+	if (once) {
+		docker.stopped = false;
+		return docker.sync();
 	}
-	return [...routes.values()];
+
+	docker.start();
+	for (const signal of ['SIGINT', 'SIGTERM'])
+		process.once(signal, () => process.exit(0));
+	// The timers of discovery do not keep a process alive by themselves
+	setInterval(() => {}, 60000);
 }
 
-async function snapshot(network, docker, log) {
-	let info;
-	try {
-		[info] = await docker(['network', 'inspect', '--', network]);
-	} catch (err) {
-		const networks = await docker(['network', 'ls', '--format', '{{.Name}}'], true);
-		if (!networks.split(/\r?\n/).includes(network))
-			return [];
-		throw err;
-	}
-	const ids = Object.keys(info.Containers || {});
-	const routes = [];
-	const seen = new Set();
-	const conflicts = new Set();
-	for (let i = 0; i < ids.length; i += 50) {
-		const containers = await docker(['inspect', '--type', 'container', '--', ...ids.slice(i, i + 50)]);
-		for (const container of containers) {
-			const entry = container.NetworkSettings.Networks[info.Name];
-			if (!container.State.Running || entry?.NetworkID !== info.Id)
-				continue;
-			try {
-				for (const route of containerRoutes(container)) {
-					const host = route.hosts[0];
-					if (seen.has(host))
-						conflicts.add(host);
-					seen.add(host);
-					routes.push(route);
-				}
-			} catch (err) {
-				log('Ignoring ' + container.Name + ': ' + err.message);
-			}
-		}
-	}
-	for (const host of conflicts)
-		log('Ignoring duplicate Docker hostname: ' + host);
-	return routes.filter(route => !conflicts.has(route.hosts[0])).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-async function publish(filename, routes) {
-	const source = JSON.stringify({ source: 'proxy-docker', routes }, null, 2) + '\n';
-	try {
-		const existing = await Fs.readFile(filename, 'utf8');
-		if (existing === source)
-			return false;
-		const document = JSON.parse(existing);
-		if (document?.source !== 'proxy-docker' || !Array.isArray(document.routes))
-			throw new Error('Refusing to replace a file not generated by Proxy Docker: ' + filename);
-	} catch (err) {
-		if (err.code !== 'ENOENT')
-			throw err;
-	}
-	const temporary = filename + '.' + Crypto.randomUUID() + '.tmp';
-	try {
-		await Fs.writeFile(temporary, source, { mode: 0o644, flag: 'wx' });
-		await Fs.rename(temporary, filename);
-	} finally {
-		await Fs.rm(temporary, { force: true });
-	}
-	return true;
-}
-
-async function watch(network, reconcile, signal, log) {
-	while (!signal.aborted) {
-		const child = Child.spawn('docker', ['events', '--filter', 'type=network', '--format', '{{json .}}'], {
-			stdio: ['ignore', 'pipe', 'ignore'], signal
-		});
-		child.on('error', err => {
-			if (!signal.aborted)
-				log('Docker events: ' + err.message);
-		});
-		const closed = new Promise(resolve => child.once('close', resolve));
-		const lines = Readline.createInterface({ input: child.stdout });
-		lines.on('line', line => {
-			let event;
-			try {
-				event = JSON.parse(line);
-			} catch {
-				return;
-			}
-			if (event.Actor?.Attributes?.name === network)
-				reconcile();
-		});
-		reconcile();
-		await closed;
-		lines.close();
-		if (!signal.aborted)
-			await delay(3000, null, { signal });
-	}
-}
-
-async function main() {
-	const [network, filename, mode, ...extra] = process.argv.slice(2);
-	if (!network || !filename || (mode && mode !== '--once') || extra.length)
-		throw new Error('Usage: node scripts/docker-watch.js <network> <generated-routes.json> [--once]');
-
-	const controller = new AbortController();
-	const { signal } = controller;
-	process.once('SIGINT', () => controller.abort());
-	process.once('SIGTERM', () => controller.abort());
-	const log = message => console.error('Proxy Docker: ' + message);
-	const docker = async (args, raw) => {
-		const { stdout } = await execFile('docker', args, { signal, timeout: 10000, maxBuffer: 16 * 1024 * 1024 });
-		return raw ? stdout : JSON.parse(stdout);
-	};
-	const update = async () => {
-		const routes = await snapshot(network, docker, log);
-		if (!signal.aborted && await publish(Path.resolve(filename), routes))
-			log('Published ' + routes.length + ' discovered routes');
-	};
-	if (mode === '--once') {
-		await update();
-		return;
-	}
-
-	let running = false;
-	let pending = false;
-	let lastError = '';
-	const reconcile = async () => {
-		pending = true;
-		if (running)
-			return;
-		running = true;
-		while (pending && !signal.aborted) {
-			pending = false;
-			try {
-				await update();
-				lastError = '';
-			} catch (err) {
-				if (!signal.aborted && lastError !== err.message) {
-					log(err.message);
-					lastError = err.message;
-				}
-			}
-		}
-		running = false;
-	};
-	const interval = setInterval(reconcile, 30000);
-	try {
-		await watch(network, reconcile, signal, log);
-	} finally {
-		clearInterval(interval);
-	}
-}
-
-if (require.main === module) {
-	main().catch(err => {
-		if (err.name !== 'AbortError') {
-			console.error('Proxy Docker: ' + err.message);
-			process.exitCode = 1;
-		}
-	});
-}
-
-module.exports = { snapshot, publish };
+Promise.resolve().then(main).catch(err => {
+	console.error('Docker: ' + err.message);
+	process.exitCode = 1;
+});

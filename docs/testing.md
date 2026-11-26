@@ -6,14 +6,14 @@ Run the full suite from the repository root:
 npm test
 ```
 
-For example, after editing the control API, run its tests directly:
+For example, after editing how the files are watched, run its tests directly:
 
 ```bash
-node --test test/control.test.js
+node --test test/reload.test.js
 ```
 
-This covers route creation and removal, live reload from `routes.json` and two scoped clients using the same route ID.
+This covers `config.json`, the site files of `data/sites` and certificates that change while Proxy runs.
 
 See the [Pebble README](../test/pebble/README.md) for the isolated ACME integration test and local debugging instructions.
 
-See the [complete configuration example](examples.md) for the Proxy config, routes JSON and Compose YAML together.
+See the [complete configuration example](examples.md) for the Proxy config, site files and Compose YAML together.

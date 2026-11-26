@@ -1,8 +1,0 @@
-[
-  {
-    "id": "app",
-    "hosts": ["app.example.com"],
-    "target": "http://app:8000",
-    "tls": "auto"
-  }
-]

@@ -17,9 +17,9 @@ Test('proxy', async function(t) {
 
 	const proxy = await start({ data }, [
 		{ id: 'shop', hosts: ['shop.test', '*.apps.test'], redirects: ['www.shop.test'], target, maxupload: 1 },
-		{ id: 'secure', hosts: ['secure.test'], redirects: ['www.secure.test'], target, tls: 'custom', hsts: true },
-		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', tls: 'off' },
-		{ id: 'pending', hosts: ['pending.test'], target, tls: 'auto' }
+		{ id: 'secure', hosts: ['secure.test'], redirects: ['www.secure.test'], target, cert: 'custom', hsts: true },
+		{ id: 'down', hosts: ['down.test'], target: 'http://127.0.0.1:9', cert: 'off' },
+		{ id: 'pending', hosts: ['pending.test'], target, cert: 'auto' }
 	]);
 
 	t.after(async () => {

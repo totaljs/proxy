@@ -3,19 +3,20 @@ services:
     image: totaljs-proxy:local
     build: ../..
     restart: unless-stopped
+    # The group that owns /var/run/docker.sock on the host: stat -c %g /var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-0}"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./proxy.conf:/proxy/proxy.conf:ro
-      - ./:/proxy/routing:ro
-      - proxy-data:/proxy/data
-    command: ["node", "index.js", "proxy.conf"]
+      - ./data:/proxy/data
+      - ./logs:/proxy/logs
+      # Docker discovery: Proxy reads which containers of the network publish themselves. The socket gives full
+      # control of Docker: see docs/docker-discovery.md for a socket proxy instead.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [proxy]
 
 networks:
   proxy:
     external: true
-
-volumes:
-  proxy-data:

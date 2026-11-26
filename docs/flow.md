@@ -1,6 +1,6 @@
 # Run Total.js Flow behind Proxy
 
-The [Flow Compose file](../examples/flow/compose.yaml) starts Total.js Proxy and the [official Flow 11 image](https://github.com/totaljs/flow#flow-in-docker) together. Compose creates a private network. Proxy receives requests and forwards them to `http://flow:8000`. The Proxy config and Flow route are inline in the YAML and require [Docker Compose 2.23.1 or later](https://docs.docker.com/reference/compose-file/configs/).
+The [Flow Compose file](../examples/flow/compose.yaml) starts Total.js Proxy and the [official Flow 11 image](https://github.com/totaljs/flow#flow-in-docker) together. Compose creates a private network. Proxy receives requests and forwards them to `http://flow:8000`. The Flow site file is inline in the YAML and require [Docker Compose 2.23.1 or later](https://docs.docker.com/reference/compose-file/configs/).
 
 ## Try it locally
 
@@ -26,7 +26,7 @@ Open `http://flow.localhost:18080/` on your computer through the tunnel. Keep th
 Point your public hostname at the server, allow inbound TCP ports 80 and 443, then run:
 
 ```sh
-FLOW_HOST=flow.example.com FLOW_TLS=auto FLOW_BIND=0.0.0.0 \
+FLOW_HOST=flow.example.com FLOW_CERT=auto FLOW_BIND=0.0.0.0 \
   docker compose -f examples/flow/compose.yaml up -d
 ```
 
