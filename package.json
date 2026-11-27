@@ -5,7 +5,7 @@
 	"main": "index.js",
 	"private": true,
 	"scripts": {
-		"start": "node index.js config",
+		"start": "node index.js data",
 		"test": "node --test \"test/*.test.js\""
 	},
 	"engines": {

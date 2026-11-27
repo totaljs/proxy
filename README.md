@@ -135,6 +135,40 @@ Back up `data`: it has the private keys. Every file is watched, so there is no c
 
 Mounting the Docker socket lets Proxy see which containers publish themselves, and whoever has the socket controls Docker on that server. [Docker discovery](docs/docker-discovery.md) describes how to run without it.
 
+## Run it without Docker
+
+Proxy is a Node.js program without dependencies. With Node.js 22 or newer, from a checkout of this repository:
+
+```sh
+node index.js data
+```
+
+`data` is the folder with `config.json` and `sites/`. Proxy makes it, and `logs` next to it, when they are not there.
+
+- **Ports 80 and 443.** A normal user cannot open them on Linux. Run Proxy as root, or let Node open them with `sudo setcap 'cap_net_bind_service=+ep' "$(command -v node)"`, or choose other ports in `data/config.json`: `{ "http": 8080, "https": 8443 }`.
+- **Keeping it running.** The command stays in the foreground. On a server, run it under systemd or another process manager, so it starts again after a failure or a reboot:
+
+  ```ini
+  [Unit]
+  Description=Total.js Proxy
+  After=network-online.target
+
+  [Service]
+  WorkingDirectory=/srv/proxy
+  ExecStart=/usr/bin/node /srv/proxy/index.js data
+  Restart=always
+  User=proxy
+  AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+- **Sites.** Write the files of `data/sites` yourself; a `target` can be any address, such as `127.0.0.1:8000` for an app on the same machine.
+- **Docker discovery** still works when the user of Proxy may read `/var/run/docker.sock`, on Linux, where the addresses of the containers are reachable from the host. Set `"docker": ""` in `data/config.json` to turn it off.
+
+`Ctrl+C` or `SIGTERM` stops Proxy; it writes its logs and counters first.
+
 ## Build from source
 
 ```sh
